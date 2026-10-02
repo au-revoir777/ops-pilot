@@ -1,0 +1,165 @@
+# =============================================================================
+# OpsPilot — Docker Compose (Local Development)
+# =============================================================================
+# Start: docker compose up -d --build
+# Stop:  docker compose down -v
+# =============================================================================
+
+services:
+  # -------------------------------------------------------------------------
+  # PostgreSQL + pgvector
+  # -------------------------------------------------------------------------
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: opspilot-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-opspilot}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-opspilot_dev}
+      POSTGRES_DB: ${POSTGRES_DB:-opspilot}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U opspilot"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # -------------------------------------------------------------------------
+  # OpsPilot API
+  # -------------------------------------------------------------------------
+  api:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    container_name: opspilot-api
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://opspilot:opspilot_dev@postgres:5432/opspilot
+      MCP_SERVER_URL: http://mcp:8001
+      PROMETHEUS_URL: http://prometheus:9090
+      LOKI_URL: http://loki:3100
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # -------------------------------------------------------------------------
+  # MCP Server
+  # -------------------------------------------------------------------------
+  mcp:
+    build:
+      context: ./mcp
+      dockerfile: Dockerfile
+    container_name: opspilot-mcp
+    env_file: .env
+    environment:
+      PROMETHEUS_URL: http://prometheus:9090
+      LOKI_URL: http://loki:3100
+    ports:
+      - "8001:8001"
+    restart: unless-stopped
+
+  # -------------------------------------------------------------------------
+  # Demo Workloads
+  # -------------------------------------------------------------------------
+  checkout:
+    build:
+      context: ./workloads/checkout
+      dockerfile: Dockerfile
+    container_name: opspilot-checkout
+    environment:
+      FAILURE_MODE: ${FAILURE_MODE:-none}
+      SERVICE_NAME: checkout
+      PORT: "8080"
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+
+  payments:
+    build:
+      context: ./workloads/payments
+      dockerfile: Dockerfile
+    container_name: opspilot-payments
+    environment:
+      FAILURE_MODE: none
+      SERVICE_NAME: payments
+      PORT: "8081"
+    ports:
+      - "8081:8081"
+    restart: unless-stopped
+
+  users:
+    build:
+      context: ./workloads/users
+      dockerfile: Dockerfile
+    container_name: opspilot-users
+    environment:
+      FAILURE_MODE: none
+      SERVICE_NAME: users
+      PORT: "8082"
+    ports:
+      - "8082:8082"
+    restart: unless-stopped
+
+  # -------------------------------------------------------------------------
+  # Observability
+  # -------------------------------------------------------------------------
+  prometheus:
+    image: prom/prometheus:v2.54.0
+    container_name: opspilot-prometheus
+    volumes:
+      - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - promdata:/prometheus
+    ports:
+      - "9090:9090"
+    restart: unless-stopped
+
+  loki:
+    image: grafana/loki:3.2.0
+    container_name: opspilot-loki
+    volumes:
+      - ./observability/loki/loki-config.yml:/etc/loki/local-config.yaml
+    ports:
+      - "3100:3100"
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    container_name: opspilot-grafana
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+    volumes:
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards
+      - grafanadata:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+      - loki
+    restart: unless-stopped
+
+  # -------------------------------------------------------------------------
+  # Frontend (Next.js)
+  # -------------------------------------------------------------------------
+  web:
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile
+    container_name: opspilot-web
+    environment:
+      NEXT_PUBLIC_API_URL: http://api:8000
+    ports:
+      - "3001:3000"
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  promdata:
+  grafanadata:
