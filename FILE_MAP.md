@@ -56,7 +56,7 @@
 |------|---------|
 | `Dockerfile` | MCP container (non-root, health check) |
 | `requirements.txt` | MCP dependencies (lighter than API) |
-| `server.py` | FastAPI MCP server with health endpoint *(skeleton)* |
+| `server.py` | Official MCP SDK (FastMCP) server *(skeleton)* |
 | `tools/` | *(Phase 5)* Typed operational tools (metrics, logs, deployments, etc.) |
 
 ---

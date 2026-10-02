@@ -50,8 +50,8 @@
 - **Date:** 2026-10-02
 - **Context:** The agent needs operational tools (metrics, logs, deployments). Could be built into the API or run as a separate service.
 - **Alternatives:** Embed tools directly in the API (simpler but violates separation), use a generic tool framework.
-- **Decision:** Dedicated MCP server as a separate FastAPI service — explicit security boundary, independently deployable, typed tool schemas.
-- **Consequences:** Clear blast radius. MCP can be scaled/secured independently. Agent communicates over HTTP. Additional container in Docker Compose.
+- **Decision:** Dedicated MCP server running in its own container as a separate service, using the official Model Context Protocol (MCP) Python SDK (`FastMCP`) over standard Streamable HTTP transport.
+- **Consequences:** Clear blast radius. Agent communicates using standard MCP protocol rather than arbitrary custom REST endpoints. Additional container in Docker Compose.
 
 ---
 
@@ -68,20 +68,20 @@
 ## D-007: Prometheus metrics in workloads
 
 - **Date:** 2026-10-02
-- **Context:** Demo workloads need to expose metrics that the agent can query during investigations.
+- **Context:** Demo workloads need to expose metrics that the agent can query during investigations. We must avoid metric cardinality explosion.
 - **Alternatives:** StatsD (requires collector), OpenTelemetry metrics (more complex setup), custom JSON endpoints.
-- **Decision:** `prometheus_client` library with `/metrics` endpoint — standard Prometheus format, direct scraping.
-- **Consequences:** Prometheus scrapes workloads directly. Metrics labels include service name, method, endpoint, status. Histograms provide p50/p95/p99 latency buckets.
+- **Decision:** `prometheus_client` library with `/metrics` endpoint. Metric-label strategy strictly uses normalized routes (e.g. `/checkout` instead of `/checkout/123`) to prevent unbounded high-cardinality labels.
+- **Consequences:** Prometheus scrapes workloads directly. Metrics labels include service name, method, normalized endpoint, and status. Histograms provide p50/p95/p99 latency buckets.
 
 ---
 
 ## D-008: Controlled failure injection via environment variable
 
 - **Date:** 2026-10-02
-- **Context:** Need safe, reproducible incident scenarios for the demo and testing.
+- **Context:** Need safe, reproducible incident scenarios for the demo and testing without risking production incidents.
 - **Alternatives:** Chaos monkey (too destructive), sidecar proxy (complex), code-level flags.
-- **Decision:** `FAILURE_MODE` env var + runtime `/admin/failure` endpoint. Modes: `none`, `latency`, `errors`, `db`.
-- **Consequences:** Safe and non-destructive. Deterministic for testing. Runtime-switchable for demos. No real infrastructure damage.
+- **Decision:** `FAILURE_MODE` env var + runtime `/admin/failure` endpoint, gated by an explicit `ENABLE_FAILURE_INJECTION` flag defaulting to `false`. Modes: `none`, `latency`, `errors`, `db`.
+- **Consequences:** Safe and non-destructive. Admin endpoint returns 403 when disabled in production. Deterministic for testing. Runtime-switchable for demos. No real infrastructure damage.
 
 ---
 
@@ -102,3 +102,23 @@
 - **Alternatives:** GitLab CI (requires GitLab), CircleCI (external service), Jenkins (self-hosted overhead).
 - **Decision:** GitHub Actions — native to GitHub, free for public repos, YAML-based, good marketplace.
 - **Consequences:** Pipeline: lint → unit tests → Docker build → Trivy scan → Terraform validate. OIDC for AWS deployment possible.
+
+---
+
+## D-011: PostgreSQL + pgvector for unified database
+
+- **Date:** 2026-10-02
+- **Context:** Need a database for relational data, incident logs, and vector embeddings for RAG architecture.
+- **Alternatives:** PostgreSQL + separate vector DB (Pinecone/Qdrant) which adds operational complexity.
+- **Decision:** PostgreSQL with `pgvector` extension as the single unified database and vector storage solution.
+- **Consequences:** Simplifies infrastructure. Ensures transactional integrity between relational data and embeddings. No need for external vector database services unless a concrete scaling requirement emerges.
+
+---
+
+## D-012: Scope of Workload Microservices
+
+- **Date:** 2026-10-02
+- **Context:** The system needs microservices to simulate a realistic production environment.
+- **Alternatives:** Build fully functional, elaborate e-commerce business applications.
+- **Decision:** Keep checkout, payments, and users intentionally lightweight. Their primary purpose is to generate realistic operational telemetry (metrics, logs, traces) and reproducible incidents.
+- **Consequences:** Development time is focused on the core SRE Copilot and investigation agent rather than bloated business logic in demo workloads.

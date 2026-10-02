@@ -22,6 +22,9 @@ from prometheus_client import Counter, Histogram, generate_latest
 SERVICE_NAME = os.getenv("SERVICE_NAME", "checkout")
 PORT = int(os.getenv("PORT", "8080"))
 FAILURE_MODE = os.getenv("FAILURE_MODE", "none")
+ENABLE_FAILURE_INJECTION = os.getenv("ENABLE_FAILURE_INJECTION", "false").lower() in (
+    "true", "1", "yes"
+)
 VERSION = os.getenv("SERVICE_VERSION", "1.8.2")
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
@@ -61,6 +64,7 @@ async def health() -> dict:
         "service": SERVICE_NAME,
         "version": VERSION,
         "failure_mode": FAILURE_MODE,
+        "failure_injection_enabled": ENABLE_FAILURE_INJECTION,
         "timestamp": datetime.now(UTC).isoformat(),
     }
 
@@ -79,8 +83,9 @@ async def checkout() -> dict:
 
     try:
         # ----- Failure injection -----
-        if FAILURE_MODE == "latency":
-            delay = random.uniform(1.5, 3.0)  # noqa: S311
+        if ENABLE_FAILURE_INJECTION:
+            if FAILURE_MODE == "latency":
+                delay = random.uniform(1.5, 3.0)  # noqa: S311
             await asyncio.sleep(delay)
             logger.warning(
                 '{"level":"WARN","service":"%s","message":"slow_query_detected",'
@@ -91,7 +96,7 @@ async def checkout() -> dict:
                 datetime.now(UTC).isoformat(),
             )
 
-        elif FAILURE_MODE == "errors":
+        elif ENABLE_FAILURE_INJECTION and FAILURE_MODE == "errors":
             if random.random() < 0.5:  # noqa: S311
                 ERROR_COUNT.labels(service=SERVICE_NAME, error_type="http_500").inc()
                 REQUEST_COUNT.labels(
@@ -99,7 +104,7 @@ async def checkout() -> dict:
                 ).inc()
                 return {"error": "Internal server error", "status": 500}
 
-        elif FAILURE_MODE == "db":
+        elif ENABLE_FAILURE_INJECTION and FAILURE_MODE == "db":
             delay = random.uniform(2.0, 5.0)  # noqa: S311
             await asyncio.sleep(delay)
             logger.warning(
@@ -150,12 +155,19 @@ async def checkout() -> dict:
 
 
 @app.post("/admin/failure")
-async def set_failure_mode(body: dict) -> dict:
+async def set_failure_mode(body: dict, response: Response) -> dict:
     """Runtime failure injection control."""
     global FAILURE_MODE
+
+    if not ENABLE_FAILURE_INJECTION:
+        response.status_code = 403
+        return {"error": "Failure injection is disabled in this environment"}
+
     mode = body.get("mode", "none")
     if mode not in ("none", "latency", "errors", "db"):
+        response.status_code = 400
         return {"error": f"Unknown failure mode: {mode}"}
+
     FAILURE_MODE = mode
     logger.info(
         '{"level":"INFO","service":"%s","message":"failure_mode_changed",'
