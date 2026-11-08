@@ -119,6 +119,26 @@ Health probes: `GET /health` (process alive, no I/O) and `GET /ready`
 New migration: `cd apps/api && alembic revision --autogenerate -m "describe change"`,
 then review the generated file. The schema is only ever changed through migrations.
 
+## Demo workloads and incident lab
+
+`checkout`, `payments` and `users` are small FastAPI services built from one
+image (`workloads/`). Checkout calls users, queries a simulated database and
+charges payments. Each service exposes `/health` and `/metrics`, writes JSON
+logs and forwards `X-Request-ID`.
+
+```bash
+ENABLE_FAILURE_INJECTION=true docker compose up -d --build checkout payments users
+make traffic                     # baseline: p95 ~200 ms
+make incident MODE=db            # or latency | errors | none
+make traffic                     # db incident: p95 ~2 s, slow_query_detected logs
+make incident MODE=none
+```
+
+Failure injection is off by default and `/admin/failure` returns 403 unless it is
+enabled. Set `FAILURE_SEED` for reproducible incidents and `FAILURE_ADMIN_TOKEN`
+to require an `X-Admin-Token` header. Host ports default to 8080/8081/8082 on
+127.0.0.1 and can be changed with `CHECKOUT_PORT`, `PAYMENTS_PORT` and `USERS_PORT`.
+
 ## Testing
 
 ```bash
@@ -140,7 +160,7 @@ releases, so tests never leak state into each other.
 
 - [x] Phase 0: Project Bootstrap
 - [x] Phase 1: Database & Core Backend
-- [ ] Phase 2: Demo Workloads
+- [x] Phase 2: Demo Workloads
 - [ ] Phase 3: Observability
 - [ ] Phase 4: RAG Pipeline
 - [ ] Phase 5: MCP Server

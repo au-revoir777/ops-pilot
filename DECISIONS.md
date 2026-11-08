@@ -190,3 +190,41 @@
 - **Date:** 2026-11-08 (Phase 1)
 - **Decision:** Domain exceptions carry a stable `code` and HTTP status (`*_NOT_FOUND` → 404, `INVALID_*_STATE` → 409, `DATABASE_ERROR` → 503). One handler renders `{"error": {"code", "message", "request_id"}}`. 5xx responses never include internal messages. Unhandled exceptions are logged with their traceback on the server and return a generic 500. A pure-ASGI middleware binds an `X-Request-ID` (reused if the client's value is safe, otherwise generated) to structlog context vars and echoes it in the response. `DATABASE_URL` is a `SecretStr`. SQL errors are logged by exception type only, and slow queries (over `DB_SLOW_QUERY_MS`) log the SQL text without bound parameters.
 - **Consequences:** Every log line for a request can be correlated, and no credentials, SQL or stack traces reach API clients.
+
+---
+
+## D-020: One shared workload package and one image for checkout, payments and users
+
+- **Date:** 2026-11-08 (Phase 2)
+- **Context:** The three demo services need the same plumbing: config, JSON logs, request IDs, metrics, failure injection and an admin endpoint. Three copies of that would drift apart, and the Phase 0 copies already had (checkout had a crashing failure-injection branch, and errors came back as HTTP 200).
+- **Alternatives:** Three independent apps with copy-pasted code; a separately versioned internal library.
+- **Decision:** A single `workloads/opsdemo` package. `app.py` is the shared factory, `observability.py` holds logs, metrics and request IDs, and `failures.py` holds the injector. Each service module contains only its routes. One `opspilot-workloads` image is built, and Compose picks the service through the container command (`uvicorn opsdemo.checkout:app`, and so on).
+- **Consequences:** Less code and one build. Services are still deployed and scaled as separate containers. The trade-off is that all three ship together, which is acceptable for demo workloads (D-012).
+
+---
+
+## D-021: Realistic failure signals without "cheat" signals
+
+- **Date:** 2026-11-08 (Phase 2)
+- **Context:** OpsPilot must diagnose incidents from telemetry. If `/health` or the request logs said "failure_mode=db", investigations would be trivial and meaningless.
+- **Decision:** Failure modes produce only the signals a real fault would:
+  - **latency:** slower business requests and `request_slow` WARN logs.
+  - **errors:** HTTP 500s, `request_processing_failed` ERROR logs and `http_request_errors_total`.
+  - **db:** a simulated database where every query gains about 900 ms, plus `db_query_duration_seconds` and `slow_query_detected` WARN logs. Checkout runs two queries per request, so p95 rises from about 200 ms to about 2 s.
+
+  Dependency failures cascade realistically: checkout returns 502 when payments returns 5xx, 504 on timeout, and records `downstream_request_duration_seconds` by outcome. `/health` is liveness only and never reveals the mode. Only the startup log and the operator's `/admin/failure` call mention injection.
+- **Reproducibility:** All randomness (injected and baseline jitter, IDs) comes from one RNG seeded by `FAILURE_SEED`.
+- **Safety:** `ENABLE_FAILURE_INJECTION` defaults to false. A configured `FAILURE_MODE` is ignored, with a warning, unless injection is enabled. `/admin/failure` returns 403 when injection is disabled, can additionally require `X-Admin-Token` (`FAILURE_ADMIN_TOKEN`, compared in constant time), and is hidden from OpenAPI. Probes and `/metrics` are never slowed down or failed.
+
+---
+
+## D-022: Workload metrics and log conventions
+
+- **Date:** 2026-11-08 (Phase 2)
+- **Metrics:**
+  - RED metrics: `http_requests_total{service,method,route,status}`, `http_request_duration_seconds{service,method,route}`, `http_request_errors_total{service,route}` and `http_requests_in_progress{service}`.
+  - `db_query_duration_seconds{service,operation}`, `downstream_request_duration_seconds{service,target,outcome}`, and `app_info{service,version}` for correlating deployments.
+  - `route` is the route template taken from Starlette's matched route (`/users/{user_id}`). Unmatched paths collapse to `unmatched`, and `/metrics` and `/health` are not counted, so every label set stays bounded.
+  - Histogram buckets are dense around 0.1–3 s, where the demo baseline and incident live.
+  - Each app uses its own `CollectorRegistry`, so several apps can run in one process during tests.
+- **Logs:** JSON on stdout, one object per line, with `timestamp`, `level`, `service`, `version`, `request_id` and an `event` name. `X-Request-ID` is accepted when it is safe (otherwise generated), echoed in the response, and forwarded on every downstream call, so one checkout can be traced across all three services.

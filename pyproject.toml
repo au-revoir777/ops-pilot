@@ -27,11 +27,16 @@ ignore = [
     "N818",  # allow custom exception names without Error suffix
 ]
 
+[tool.ruff.lint.per-file-ignores]
+# Tests use fixed fake secrets and seeded (non-crypto) randomness on purpose.
+"**/tests/**" = ["S105", "S106", "S311"]
+
 [tool.ruff.lint.isort]
-known-first-party = ["app", "mcp"]
+known-first-party = ["app", "mcp", "opsdemo", "workload_testing"]
 
 [tool.pytest.ini_options]
-testpaths = ["apps/api/tests", "mcp/tests", "tests"]
+testpaths = ["apps/api/tests", "workloads/tests", "mcp/tests", "tests"]
+pythonpath = ["workloads", "workloads/tests"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 addopts = "--strict-markers"

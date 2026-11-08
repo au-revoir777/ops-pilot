@@ -2,7 +2,7 @@
 # OpsPilot â€” Makefile
 # =============================================================================
 .PHONY: help setup dev up down build test test-unit test-integration test-system \
-        test-evaluation test-db-up test-db-down migrate lint scan ingest incident cloud-up cloud-down clean
+        test-evaluation test-db-up test-db-down migrate lint scan ingest incident traffic cloud-up cloud-down clean
 
 COMPOSE := docker compose
 PYTHON  := python
@@ -91,10 +91,13 @@ ingest: ## Ingest documents into RAG knowledge base
 # ---------------------------------------------------------------------------
 # Incident Lab
 # ---------------------------------------------------------------------------
-incident: ## Inject a test incident (default: latency)
-	@echo "Injecting checkout latency incident..."
-	curl -s -X POST http://localhost:8080/admin/failure -H "Content-Type: application/json" \
-		-d '{"mode": "latency"}' | python -m json.tool
+CHECKOUT_URL ?= http://localhost:8080
+MODE ?= db
+incident: ## Inject a checkout incident: make incident MODE=db|latency|errors|none (needs ENABLE_FAILURE_INJECTION=true)
+	curl -s -X POST $(CHECKOUT_URL)/admin/failure -H "Content-Type: application/json" -d '{"mode": "$(MODE)"}'
+
+traffic: ## Send 50 checkout requests (baseline / incident traffic)
+	$(PYTHON) workloads/scripts/traffic.py --url $(CHECKOUT_URL) --requests 50
 
 # ---------------------------------------------------------------------------
 # Cloud (AWS)

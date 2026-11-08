@@ -44,7 +44,7 @@ jobs:
         with:
           python-version: "3.11"
       - name: Install dependencies
-        run: pip install -r apps/api/requirements.txt
+        run: pip install -r apps/api/requirements.txt -r workloads/requirements.txt
       - name: Run unit tests
         run: pytest -m unit -v --tb=short
         working-directory: .
@@ -81,7 +81,7 @@ jobs:
         with:
           python-version: "3.11"
       - name: Install dependencies
-        run: pip install -r apps/api/requirements.txt
+        run: pip install -r apps/api/requirements.txt -r workloads/requirements.txt
       - name: Migration round-trip (upgrade, downgrade, re-upgrade)
         working-directory: apps/api
         run: |
@@ -104,12 +104,8 @@ jobs:
         run: docker build -t opspilot-api:ci ./apps/api
       - name: Build MCP image
         run: docker build -t opspilot-mcp:ci ./mcp
-      - name: Build Checkout image
-        run: docker build -t opspilot-checkout:ci ./workloads/checkout
-      - name: Build Payments image
-        run: docker build -t opspilot-payments:ci ./workloads/payments
-      - name: Build Users image
-        run: docker build -t opspilot-users:ci ./workloads/users
+      - name: Build workloads image (checkout, payments, users)
+        run: docker build -t opspilot-workloads:ci ./workloads
 
   # ---------------------------------------------------------------------------
   # Security Scan

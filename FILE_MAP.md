@@ -77,27 +77,23 @@
 
 ## `workloads/` — Demo Microservices
 
-### `workloads/checkout/`
+One package, one image, three services (D-020). Compose picks the service via the container command.
 
 | File | Purpose |
 |------|---------|
-| `main.py` | Checkout service with Prometheus metrics, structured logging, and failure injection (`latency`/`errors`/`db` modes) |
-| `Dockerfile` | Container (non-root, port 8080) |
-| `requirements.txt` | Minimal deps (FastAPI, uvicorn, prometheus-client) |
-
-### `workloads/payments/`
-
-| File | Purpose |
-|------|---------|
-| `main.py` | Payments service with `/process` endpoint, metrics |
-| `Dockerfile` | Container (non-root, port 8081) |
-
-### `workloads/users/`
-
-| File | Purpose |
-|------|---------|
-| `main.py` | Users service with `/users/{id}` endpoint, metrics |
-| `Dockerfile` | Container (non-root, port 8082) |
+| `Dockerfile` | Single non-root image for checkout, payments and users (health check on `SERVICE_PORT`) |
+| `requirements.txt` | Shared workload dependencies |
+| `opsdemo/app.py` | Shared app factory: `/health`, `/metrics`, `/admin/failure`, error handling, simulated DB, downstream HTTP client |
+| `opsdemo/config.py` | Env-driven `WorkloadSettings` (failure injection off by default) |
+| `opsdemo/failures.py` | Seedable `FailureInjector`: `none`, `latency`, `errors`, `db` |
+| `opsdemo/observability.py` | JSON logs, request-ID middleware, bounded RED/DB/downstream metrics |
+| `opsdemo/checkout.py` | `POST /checkout`: users lookup → cart query → payment → order write (port 8080) |
+| `opsdemo/payments.py` | `POST /payments`: capture or decline (port 8081) |
+| `opsdemo/users.py` | `GET /users/{user_id}`: demo users `u-1`..`u-1000` (port 8082) |
+| `scripts/traffic.py` | Sends checkout traffic and prints p50/p95 and status counts |
+| `tests/test_failure_injection.py` | Unit: injector modes, seeding, settings |
+| `tests/test_workload_endpoints.py` | Unit: endpoints, metrics labels, request IDs, failure behaviour, admin gate (stubbed downstream) |
+| `tests/test_workload_integration.py` | Integration: the three services as real HTTP servers talking to each other |
 
 ---
 
