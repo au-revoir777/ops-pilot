@@ -108,17 +108,23 @@ services:
   # -------------------------------------------------------------------------
   # MCP Server
   # -------------------------------------------------------------------------
+  # Read-only operational tools for the agent (Model Context Protocol).
+  # No .env file: the server only gets the settings it needs (least privilege).
   mcp:
     build:
       context: ./mcp
       dockerfile: Dockerfile
+    image: opspilot-mcp:local
     container_name: opspilot-mcp
-    env_file:
-      - path: .env
-        required: false
     environment:
       PROMETHEUS_URL: http://prometheus:9090
       LOKI_URL: http://loki:3100
+      API_URL: http://api:8000
+      CATALOG_PATH: /etc/opspilot/services.yml
+      MCP_AUTH_TOKEN: ${MCP_AUTH_TOKEN:-}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    volumes:
+      - ./observability/catalog/services.yml:/etc/opspilot/services.yml:ro
     ports:
       - "127.0.0.1:${MCP_PORT:-8001}:8001"
     restart: unless-stopped

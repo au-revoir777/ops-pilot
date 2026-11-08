@@ -144,10 +144,16 @@ def test_injected_latency_is_visible_in_metrics_and_logs(http):
 
     switch = http.post(f"{CHECKOUT}/admin/failure", json={"mode": "none"})
     assert switch.status_code == 200, "run the stack with ENABLE_FAILURE_INJECTION=true"
-    send_checkouts(http, 30)
-    time.sleep(SCRAPE_WAIT)
+
+    # Wait for a clean baseline: an earlier test may have left slow requests in
+    # the 1-minute rate window. Keep traffic flowing so the window refills.
+    def baseline_is_normal() -> bool:
+        send_checkouts(http, 10)
+        value = checkout_p95()
+        return value == value and value < 1.0  # not NaN, and back to normal
+
+    assert eventually(baseline_is_normal, timeout=120, interval=SCRAPE_WAIT), checkout_p95()
     baseline = checkout_p95()
-    assert baseline == baseline, "no checkout latency data in Prometheus"  # not NaN
 
     try:
         http.post(f"{CHECKOUT}/admin/failure", json={"mode": "latency"})

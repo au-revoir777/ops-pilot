@@ -353,3 +353,39 @@
   | Off-topic questions returning nothing | 3 of 3 |
 
   Observed scores: relevant questions top out around 0.70–0.82; off-topic questions around 0.40–0.43. The threshold sits between the two. The `pytest -m evaluation` test fails on regressions below hit@5 0.9 or MRR 0.75.
+
+---
+
+## D-029: Typed, read-only MCP tools over the official SDK
+
+- **Date:** 2026-11-08 (Phase 5)
+- **Context:** The agent needs live operational evidence (metrics, logs, deployments, dependencies, alerts) without the ability to change anything.
+- **Decision:**
+  - The MCP server (`mcp/opsmcp`) is built on the official MCP Python SDK (FastMCP, `mcp>=1.10,<2`) using stateless Streamable HTTP with JSON responses.
+  - It exposes six tools, each with published input and output schemas and the `readOnlyHint` annotation.
+  - The tools issue only GET requests to fixed Prometheus, Loki and OpsPilot API URLs.
+  - Service names are validated before they are interpolated into PromQL or LogQL. LogQL is always built server-side.
+  - Caller-supplied PromQL is capped in range (24 h), resolution (300 points per series) and series count (50).
+  - Results carry `status` (`ok`, `partial` or `unavailable`) plus `errors` such as `metrics_unavailable`. Missing data is `null`, never estimated.
+  - Every call is logged (`tool_call`, `tool_name`, `latency_ms`, `outcome`) and counted (`opspilot_mcp_tool_calls_total`, `opspilot_mcp_tool_duration_seconds`, `opspilot_mcp_backend_request_duration_seconds`).
+  - An optional bearer token protects `/mcp`. The container gets no `.env` file, only its own settings.
+- **Data sources chosen to stay service-agnostic:**
+  - Deployments come from the version history of the `app_info` version label.
+  - Dependencies come from the service catalog file (`observability/catalog/services.yml`, re-read when it changes) merged with observed downstream traffic.
+  - An onboarded external project works without code changes.
+- **Alternatives:**
+  - Shell or kubectl access: rejected for blast radius and prompt-injection risk.
+  - A plain REST API labelled "MCP": rejected per D-005.
+  - Exposing raw Prometheus/Loki proxies: rejected because they are unbounded and allow arbitrary LogQL.
+- **Consequences:** The full per-tool documentation is in `docs/design/mcp-tools.md` (spec section 42).
+
+---
+
+## D-030: Project virtual environment; error-ratio rule returns 0, not "no data"
+
+- **Date:** 2026-11-08 (Phase 5)
+- **Virtual environment:**
+  - Installing the MCP SDK into the laptop's global Python upgraded pydantic and starlette, which broke another local project that pins `pydantic==2.9.2`.
+  - The global packages were restored, and OpsPilot now uses its own git-ignored `.venv` holding the API, workload and MCP dependencies.
+  - CI installs all three requirement sets together.
+- **Recording rule fix:** a service with traffic but no 5xx has no `http_request_errors_total` series, so the error-ratio rule returned nothing. Health then reported `error_rate: null` instead of `0`. The rule now falls back to `requests * 0`, so the ratio is a real 0.

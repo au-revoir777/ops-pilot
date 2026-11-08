@@ -7,9 +7,15 @@ groups:
       - record: service:http_requests:rate1m
         expr: sum by (project, service) (rate(http_requests_total[1m]))
 
+      # A service with traffic but no 5xx yet has no error series at all; the
+      # "or ... * 0" makes its ratio 0 instead of missing.
       - record: service:http_errors:ratio_rate1m
         expr: |
-          sum by (project, service) (rate(http_request_errors_total[1m]))
+          (
+            sum by (project, service) (rate(http_request_errors_total[1m]))
+              or
+            sum by (project, service) (rate(http_requests_total[1m])) * 0
+          )
             /
           sum by (project, service) (rate(http_requests_total[1m]))
 

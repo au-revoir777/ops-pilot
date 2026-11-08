@@ -191,10 +191,10 @@ def build() -> dict[str, Any]:
             (0, 44, 8, 8),
         ),
         timeseries(
-            "MCP tool calls (Phase 5+)",
+            "MCP tool calls",
             [
                 target(
-                    "sum by (tool, outcome) (rate(opspilot_tool_calls_total[5m]))",
+                    "sum by (tool, outcome) (rate(opspilot_mcp_tool_calls_total[5m]))",
                     "{{tool}} {{outcome}}",
                 )
             ],

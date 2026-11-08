@@ -604,7 +604,7 @@
     },
     {
       "type": "timeseries",
-      "title": "MCP tool calls (Phase 5+)",
+      "title": "MCP tool calls",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -637,7 +637,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (tool, outcome) (rate(opspilot_tool_calls_total[5m]))",
+          "expr": "sum by (tool, outcome) (rate(opspilot_mcp_tool_calls_total[5m]))",
           "legendFormat": "{{tool}} {{outcome}}",
           "refId": "A"
         }

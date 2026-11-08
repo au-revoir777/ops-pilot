@@ -1,0 +1,25 @@
+# Service catalog read by the MCP server (get_service_dependencies,
+# get_service_health). Declares ownership and dependencies; dependencies seen
+# in live traffic are merged in automatically. Edits are picked up without a
+# restart. To describe an onboarded external project, add its services here.
+services:
+  checkout:
+    project: opsdemo
+    description: Order placement (POST /checkout)
+    owner: commerce-platform
+    depends_on: [users, payments]
+  payments:
+    project: opsdemo
+    description: Payment authorisation and capture
+    owner: payments-team
+    depends_on: []
+  users:
+    project: opsdemo
+    description: User profile lookups
+    owner: identity-team
+    depends_on: []
+  opspilot-api:
+    project: opspilot
+    description: OpsPilot incident and investigation API
+    owner: sre
+    depends_on: []

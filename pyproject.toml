@@ -25,6 +25,7 @@ ignore = [
     "S101",  # allow assert in tests
     "S104",  # allow binding to 0.0.0.0
     "N818",  # allow custom exception names without Error suffix
+    "SIM117",  # nested async context managers read better than one long `with`
 ]
 
 [tool.ruff.lint.per-file-ignores]
@@ -32,11 +33,11 @@ ignore = [
 "**/tests/**" = ["S105", "S106", "S311"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["app", "mcp", "opsdemo", "workload_testing"]
+known-first-party = ["app", "opsmcp", "opsdemo", "workload_testing", "mcp_fakes"]
 
 [tool.pytest.ini_options]
 testpaths = ["apps/api/tests", "workloads/tests", "mcp/tests", "tests"]
-pythonpath = ["workloads", "workloads/tests"]
+pythonpath = ["workloads", "workloads/tests", "mcp", "mcp/tests"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 # System/evaluation tests need a running stack or LLM; run them explicitly with -m.

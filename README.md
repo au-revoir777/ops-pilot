@@ -197,6 +197,31 @@ score. Retrieved text is treated as untrusted data, and instruction-like
 passages are flagged. To add a document, drop a Markdown file into the right
 folder and re-run the ingest.
 
+## MCP server (operational tools)
+
+The agent reaches live telemetry only through six typed, read-only MCP tools:
+
+- `get_service_health`
+- `query_metrics`
+- `get_recent_logs`
+- `get_recent_deployments`
+- `get_service_dependencies`
+- `get_incident_events`
+
+The server uses the official MCP SDK over Streamable HTTP on port 8001. See
+[docs/design/mcp-tools.md](docs/design/mcp-tools.md) for schemas, security
+boundaries and failure modes.
+
+```bash
+docker compose up -d --build mcp       # plus prometheus, loki and the services
+python mcp/scripts/call_tool.py --list
+python mcp/scripts/call_tool.py get_service_health service=checkout
+python mcp/scripts/call_tool.py get_recent_logs service=checkout minutes=10 severity=warning
+```
+
+Set `MCP_AUTH_TOKEN` to require a bearer token. Service dependencies are declared
+in `observability/catalog/services.yml` and merged with observed traffic.
+
 ## Testing
 
 ```bash
@@ -223,7 +248,7 @@ releases, so tests never leak state into each other.
 - [x] Phase 2: Demo Workloads
 - [x] Phase 3: Observability
 - [x] Phase 4: RAG Pipeline
-- [ ] Phase 5: MCP Server
+- [x] Phase 5: MCP Server
 - [ ] Phase 6: Agent
 - [ ] Phase 7: Investigation API
 - [ ] Phase 8: Frontend

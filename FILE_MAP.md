@@ -83,6 +83,21 @@
 
 | File | Purpose |
 |------|---------|
+| `Dockerfile` | MCP container (non-root, health check, port 8001) |
+| `requirements.txt` | MCP SDK and server dependencies |
+| `opsmcp/server.py` | FastMCP server: tool registration, schemas, `/health`, `/metrics`, bearer auth, ASGI app |
+| `opsmcp/tools.py` | The six tool implementations (validation, queries, typed results) |
+| `opsmcp/models.py` | Typed tool outputs (published as MCP output schemas) |
+| `opsmcp/backends.py` | Read-only Prometheus, Loki and OpsPilot API clients |
+| `opsmcp/catalog.py` | Service catalog loader (declared dependencies) |
+| `opsmcp/instrumentation.py` | Tool-call logging and Prometheus metrics |
+| `opsmcp/config.py` | Env-driven settings and guard rails |
+| `scripts/call_tool.py` | CLI: list or call tools through the MCP client |
+| `tests/test_mcp_tools.py` | Unit tests for every tool (fake backends) |
+| `tests/test_mcp_protocol.py` | Integration: real MCP client ↔ server over Streamable HTTP |
+| `tests/mcp_fakes.py` | Fake Prometheus/Loki/API transport |
+
+------|---------|
 | `Dockerfile` | MCP container (non-root, health check) |
 | `requirements.txt` | MCP dependencies (lighter than API) |
 | `server.py` | Official MCP SDK (FastMCP) server *(skeleton)* |
@@ -120,6 +135,7 @@ One package, one image, three services (D-020). Compose picks the service via th
 | `prometheus/targets/demo-workloads.yml` | File-discovered demo targets (`project=opsdemo`) |
 | `prometheus/targets/external-project.yml.example` | Format for onboarding an external project |
 | `scripts/add_monitored_project.py` | Custom option: connect an external project's /metrics endpoints |
+| `catalog/services.yml` | Service catalog: owners and declared dependencies (read by MCP) |
 | `prometheus/rules/opspilot.yml` | RED recording rules (rate, error ratio, p50/p95/p99, DB p95) + alerts |
 | `loki/loki-config.yml` | Loki single-binary config (filesystem storage, schema v13) |
 | `alloy/config.alloy` | Grafana Alloy: Docker log discovery → JSON parsing → Loki (request_id as structured metadata) |
@@ -152,6 +168,12 @@ One package, one image, three services (D-020). Compose picks the service via th
 
 ---
 
+## `docs/design/`
+
+| File | Purpose |
+|------|---------|
+| `mcp-tools.md` | Per-tool schemas, security boundary, failure modes, tests |
+
 ## `docs/knowledge/` — RAG Knowledge Base
 
 Markdown with YAML front matter (`title`, `doc_type`, `services`, extras kept as metadata).
@@ -178,6 +200,7 @@ Markdown with YAML front matter (`title`, `doc_type`, `services`, extras kept as
 |------|---------|
 | `observability/test_observability_config.py` | Unit: scrape targets vs Compose, rules/dashboards only use emitted metrics, stale dashboard, data-source UIDs, ports |
 | `observability/test_add_monitored_project.py` | Unit: onboarding script output and validation |
+| `system/test_mcp_stack.py` | System: MCP tools against the live stack, incl. a latency incident |
 | `system/test_observability_stack.py` | System (`pytest -m system`, needs the stack): targets up, rules loaded, Grafana, cross-service request trace in Loki, latency injection visible |
 | `evaluation/` | *(Phase 10)* Agent evaluation test cases |
 | `fixtures/rag_eval.yml` | Labelled retrieval questions (relevant + off-topic) |

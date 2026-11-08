@@ -18,7 +18,7 @@ setup: ## Initial project setup
 	@echo "==> Copying .env.example â†’ .env (if missing)"
 	@if not exist .env copy .env.example .env
 	@echo "==> Installing Python dependencies"
-	pip install -r apps/api/requirements.txt
+	pip install -r apps/api/requirements.txt -r workloads/requirements.txt -r mcp/requirements.txt
 	@echo "==> Setup complete"
 
 # ---------------------------------------------------------------------------

@@ -44,7 +44,7 @@ jobs:
         with:
           python-version: "3.11"
       - name: Install dependencies
-        run: pip install -r apps/api/requirements.txt -r workloads/requirements.txt
+        run: pip install -r apps/api/requirements.txt -r workloads/requirements.txt -r mcp/requirements.txt
       - name: Run unit tests
         run: pytest -m unit -v --tb=short
         working-directory: .
@@ -81,7 +81,7 @@ jobs:
         with:
           python-version: "3.11"
       - name: Install dependencies
-        run: pip install -r apps/api/requirements.txt -r workloads/requirements.txt
+        run: pip install -r apps/api/requirements.txt -r workloads/requirements.txt -r mcp/requirements.txt
       - name: Migration round-trip (upgrade, downgrade, re-upgrade)
         working-directory: apps/api
         run: |

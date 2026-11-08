@@ -19,7 +19,11 @@ pytestmark = pytest.mark.unit
 
 ROOT = Path(__file__).resolve().parents[2]
 OBS = ROOT / "observability"
-METRIC_SOURCES = [ROOT / "apps/api/app/metrics.py", ROOT / "workloads/opsdemo/observability.py"]
+METRIC_SOURCES = [
+    ROOT / "apps/api/app/metrics.py",
+    ROOT / "workloads/opsdemo/observability.py",
+    ROOT / "mcp/opsmcp/instrumentation.py",
+]
 DASHBOARD = OBS / "grafana/dashboards/opspilot-services.json"
 # A metric (or recording rule) name immediately followed by a selector or range.
 METRIC_REF = re.compile(r"\b([a-zA-Z_][a-zA-Z0-9_]*(?::[a-zA-Z0-9_]+)*)\s*[\{\[]")

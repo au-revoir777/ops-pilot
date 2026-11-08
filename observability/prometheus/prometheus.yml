@@ -37,4 +37,9 @@ scrape_configs:
     static_configs:
       - targets: ["alloy:12345"]
 
-  # The MCP server is added in Phase 5, when it gains a /metrics endpoint.
+  - job_name: opspilot-mcp
+    static_configs:
+      - targets: ["mcp:8001"]
+        labels:
+          project: opspilot
+          environment: local
