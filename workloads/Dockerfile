@@ -20,7 +20,7 @@ USER workload
 # Default to checkout; Compose overrides the command per service.
 ENV SERVICE_PORT=8080
 EXPOSE 8080 8081 8082
-HEALTHCHECK --interval=5s --timeout=3s --start-period=30s --retries=5 \
+HEALTHCHECK --interval=5s --timeout=5s --start-period=60s --retries=10 \
     CMD python -c "import os, urllib.request; urllib.request.urlopen(f'http://127.0.0.1:{os.environ[\"SERVICE_PORT\"]}/health', timeout=2)"
 
 CMD ["uvicorn", "opsdemo.checkout:app", "--host", "0.0.0.0", "--port", "8080"]

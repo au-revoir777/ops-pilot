@@ -222,6 +222,29 @@ python mcp/scripts/call_tool.py get_recent_logs service=checkout minutes=10 seve
 Set `MCP_AUTH_TOKEN` to require a bearer token. Service dependencies are declared
 in `observability/catalog/services.yml` and merged with observed traffic.
 
+## Investigation agent
+
+A bounded LangGraph agent investigates an incident by combining the knowledge base
+(RAG) with live telemetry (MCP tools). Its report separates five things:
+
+- observed facts
+- retrieved evidence
+- hypotheses
+- validation
+- the conclusion, with a transparent confidence breakdown
+
+It recommends remediation but never performs it.
+
+```bash
+cd apps/api
+python -m app.agents.run "Investigate why checkout latency increased" --minutes 30
+python -m app.agents.evaluation        # 14 scenarios, machine-readable metrics
+```
+
+The agent works without any LLM. Set `LLM_PROVIDER` (`openai` or `anthropic`),
+`LLM_MODEL` and `LLM_API_KEY` to add a labelled, model-written summary. See
+[docs/design/agent.md](docs/design/agent.md).
+
 ## Testing
 
 ```bash
@@ -249,7 +272,7 @@ releases, so tests never leak state into each other.
 - [x] Phase 3: Observability
 - [x] Phase 4: RAG Pipeline
 - [x] Phase 5: MCP Server
-- [ ] Phase 6: Agent
+- [x] Phase 6: Agent
 - [ ] Phase 7: Investigation API
 - [ ] Phase 8: Frontend
 - [ ] Phase 9: E2E Incident Scenario

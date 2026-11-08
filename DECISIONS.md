@@ -389,3 +389,36 @@
   - The global packages were restored, and OpsPilot now uses its own git-ignored `.venv` holding the API, workload and MCP dependencies.
   - CI installs all three requirement sets together.
 - **Recording rule fix:** a service with traffic but no 5xx has no `http_request_errors_total` series, so the error-ratio rule returned nothing. Health then reported `error_rate: null` instead of `0`. The rule now falls back to `requests * 0`, so the ratio is a real 0.
+
+---
+
+## D-031: Deterministic reasoning; the LLM is optional and narrowly scoped
+
+- **Date:** 2026-11-08 (Phase 6)
+- **Context:** No LLM key is configured, CI must not depend on a live model, and the spec forbids presenting unsupported LLM assumptions as facts.
+- **Decision:**
+  - Hypotheses, validation, confidence and recommendations are produced by explicit rules over telemetry-derived signals (`app/agents/reasoning.py`).
+  - `LLM_PROVIDER` is `none` by default; `openai` and `anthropic` are also supported, configured through `LLM_MODEL`, `LLM_API_KEY` and the optional `LLM_BASE_URL`.
+  - When configured, the LLM only (a) picks the service from a list of known names when the question names none, and (b) writes a short summary labelled "model-written summary, not evidence".
+  - The LLM never chooses tools, causes or confidence. LLM failures leave the result unchanged and are reported in `llm.status`.
+- **Consequences:**
+  - The agent's behaviour is reproducible and testable, and every claim traces to observation or evidence ids.
+  - The cost is that unfamiliar failure modes need new rules: the agent does not improvise causes.
+
+---
+
+## D-032: Bounded LangGraph state machine with a documented confidence heuristic
+
+- **Date:** 2026-11-08 (Phase 6)
+- **Decision:**
+  - The flow is planner → RAG → MCP → hypothesis → validator → synthesizer. The validator can request at most one pre-defined follow-up round: dependency health, wider deployment and error-log lookback.
+  - Limits: a LangGraph recursion limit of 15, 2 evidence rounds, 16 tool calls and a 120 s timeout.
+  - The MCP client is restricted to the six read-only tools.
+  - Confidence = clamp(0.10 base + temporal 0.25 + metric 0.25 + log 0.20 + deployment 0.10 + knowledge 0.10 − 0.25 per contradiction, 0, 0.95) × (0.6 + 0.4 × coverage).
+  - Root causes are reported from 0.25 confidence, and labelled tentative below 0.5.
+  - Deploy and onset times get a ±2 minute tolerance, because both come from 1-minute-resolution telemetry.
+- **Evaluation:** 14 simulated scenarios (`tests/evaluation/cases.json`). All 14 have the correct root cause and service, evidence grounding is 1.0, tool selection 1.0, and the unsupported-claim rate is 0.
+  - Caveat: these scenarios were written together with the rules.
+  - One threshold change was made after seeing results: the reportable minimum was lowered from 0.3 to 0.25, so a logs-only diagnosis with Prometheus down is reported as *tentative* instead of not at all.
+- **Live check:** a staged release-plus-slow-database incident was diagnosed as "Release 1.8.5 of checkout introduced a database query regression" (95% heuristic confidence), with a recommended rollback to 1.8.4.
+- **Details:** `docs/design/agent.md`.

@@ -56,9 +56,12 @@ class Settings(BaseSettings):
     )
 
     # --- LLM ---
-    llm_provider: str = Field(default="openai", description="LLM provider name")
-    llm_model: str = Field(default="gpt-4o", description="LLM model identifier")
-    llm_api_key: str = Field(default="", description="LLM API key (from env/secrets)")
+    # --- LLM (optional; DECISIONS D-031). "none" = deterministic agent only ---
+    llm_provider: Literal["none", "openai", "anthropic"] = Field(default="none")
+    llm_model: str = Field(default="gpt-4o-mini", description="Model id for the provider")
+    llm_api_key: SecretStr | None = Field(default=None, description="From env/secrets only")
+    llm_base_url: str | None = Field(default=None, description="Override for gateways/proxies")
+    llm_timeout_seconds: float = Field(default=30, gt=0, le=120)
 
     # --- Embeddings (DECISIONS D-027) ---
     # local: BAAI/bge-small-en-v1.5 via fastembed (ONNX, no API key)
@@ -85,8 +88,16 @@ class Settings(BaseSettings):
     api_key: str = Field(default="", description="API authentication key")
 
     # --- Agent ---
-    agent_max_steps: int = Field(default=15, description="Max agent graph steps")
-    agent_timeout_seconds: int = Field(default=120, description="Agent execution timeout")
+    agent_max_steps: int = Field(default=15, ge=5, le=50, description="LangGraph recursion limit")
+    agent_max_iterations: int = Field(
+        default=2, ge=1, le=4, description="Evidence-gathering rounds"
+    )
+    agent_max_tool_calls: int = Field(default=16, ge=1, le=50)
+    agent_timeout_seconds: int = Field(default=120, ge=5, le=600)
+    agent_window_minutes: int = Field(default=60, ge=5, le=360, description="Default lookback")
+    agent_degraded_p95_ms: float = Field(default=1000, gt=0)
+    agent_degraded_error_ratio: float = Field(default=0.05, ge=0, le=1)
+    mcp_auth_token: SecretStr | None = Field(default=None, description="Bearer token for MCP")
 
     # --- RAG ---
     rag_docs_path: str = Field(default="../../docs/knowledge", description="Knowledge base root")

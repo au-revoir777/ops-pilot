@@ -62,3 +62,6 @@ alembic/versions/__pycache__/
 # Onboarded external projects (internal hostnames) stay out of git by default.
 observability/prometheus/targets/*.yml
 !observability/prometheus/targets/demo-workloads.yml
+
+# Generated evaluation output (re-created by pytest -m evaluation)
+tests/evaluation/results/

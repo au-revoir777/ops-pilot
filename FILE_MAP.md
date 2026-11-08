@@ -58,7 +58,16 @@
 | `app/db/models/knowledge.py` | `Document`, `DocumentChunk` (vector(384), HNSW cosine) |
 | `app/db/repositories/knowledge.py` | Document/chunk persistence and filtered vector search |
 | `app/db/migrations/versions/0002_knowledge_base.py` | Knowledge-base tables and indexes |
-| `app/agents/` | *(Phase 6)* LangGraph agent: graph, state, planner, etc. |
+| `app/agents/graph.py` | Bounded LangGraph agent: planner, rag, mcp, hypothesis, validator, synthesizer |
+| `app/agents/evidence.py` | Telemetry → observations with signal tags (step detection, log counts, deploys) |
+| `app/agents/reasoning.py` | Cause rules, validation, confidence heuristic, recommendations |
+| `app/agents/tools.py` | Allow-listed MCP client (official SDK) |
+| `app/agents/llm.py` | Optional LLM providers (none/openai/anthropic), labelled summaries |
+| `app/agents/models.py` | Report, observation, hypothesis, confidence models |
+| `app/agents/simulation.py` | Scenario replay: simulated MCP/RAG results for evaluation and tests |
+| `app/agents/evaluation.py` | Evaluation metrics over `tests/evaluation/cases.json` |
+| `app/agents/render.py` | Markdown rendering of a report |
+| `app/agents/run.py` | CLI: `python -m app.agents.run "question"` against the live stack |
 
 ### Tests
 
@@ -71,6 +80,7 @@
 | `tests/unit/test_rag.py` | Loader, cleaner, chunker, embedders, ranking, prompt-injection defence, search API errors |
 | `tests/integration/test_rag_pipeline.py` | Ingest → pgvector → retrieval, filters, idempotency, pruning, search API |
 | `tests/integration/test_rag_quality.py` | `pytest -m evaluation`: retrieval quality with the real model |
+| `tests/unit/test_agent.py` | Graph transitions, bounds, planner, evidence, confidence, LLM stub |
 | `tests/unit/test_services.py` | State machines, transaction commit/rollback with mocked repositories |
 | `tests/integration/conftest.py` | Real Postgres fixtures: Alembic to head, savepoint-rollback isolation |
 | `tests/integration/test_migrations.py` | Upgrade from empty, downgrade/re-upgrade, models == migrations |
@@ -173,6 +183,7 @@ One package, one image, three services (D-020). Compose picks the service via th
 | File | Purpose |
 |------|---------|
 | `mcp-tools.md` | Per-tool schemas, security boundary, failure modes, tests |
+| `agent.md` | Agent state diagram, nodes, rules, confidence formula, limits |
 
 ## `docs/knowledge/` — RAG Knowledge Base
 
@@ -202,10 +213,12 @@ Markdown with YAML front matter (`title`, `doc_type`, `services`, extras kept as
 | `observability/test_add_monitored_project.py` | Unit: onboarding script output and validation |
 | `system/test_mcp_stack.py` | System: MCP tools against the live stack, incl. a latency incident |
 | `system/test_observability_stack.py` | System (`pytest -m system`, needs the stack): targets up, rules loaded, Grafana, cross-service request trace in Loki, latency injection visible |
-| `evaluation/` | *(Phase 10)* Agent evaluation test cases |
+| `evaluation/cases.json` | 14 agent evaluation scenarios |
+| `evaluation/test_agent_evaluation.py` | `pytest -m evaluation`: runs the scenarios, writes `results/latest.json` |
 | `fixtures/rag_eval.yml` | Labelled retrieval questions (relevant + off-topic) |
 
 -----------|---------|
 | `system/` | *(Phase 10)* End-to-end system tests |
-| `evaluation/` | *(Phase 10)* Agent evaluation test cases |
+| `evaluation/cases.json` | 14 agent evaluation scenarios |
+| `evaluation/test_agent_evaluation.py` | `pytest -m evaluation`: runs the scenarios, writes `results/latest.json` |
 | `fixtures/rag_eval.yml` | Labelled retrieval questions (relevant + off-topic) |
