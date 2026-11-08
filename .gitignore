@@ -65,3 +65,6 @@ observability/prometheus/targets/*.yml
 
 # Generated evaluation output (re-created by pytest -m evaluation)
 tests/evaluation/results/
+
+# Coverage report (make coverage)
+coverage.xml

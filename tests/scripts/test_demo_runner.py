@@ -11,6 +11,8 @@ import pytest
 import demo as demo_module
 from demo import Demo
 
+pytestmark = pytest.mark.unit
+
 
 class FakeApi:
     """Just enough of the OpsPilot API for one demo run."""

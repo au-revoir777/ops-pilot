@@ -33,7 +33,7 @@ ignore = [
 "**/tests/**" = ["S105", "S106", "S311"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["app", "opsmcp", "opsdemo", "workload_testing", "mcp_fakes"]
+known-first-party = ["app", "opsmcp", "opsdemo", "workload_testing", "mcp_fakes", "demo", "run_tests"]
 
 [tool.pytest.ini_options]
 testpaths = ["apps/api/tests", "workloads/tests", "mcp/tests", "tests"]
@@ -48,3 +48,14 @@ markers = [
     "system: System / E2E tests (require full stack)",
     "evaluation: Agent evaluation tests",
 ]
+
+[tool.coverage.run]
+# make coverage / python scripts/run_tests.py coverage (unit + integration)
+source = ["apps/api/app", "mcp/opsmcp", "workloads/opsdemo", "scripts"]
+branch = true
+omit = ["*/migrations/versions/*"]
+
+[tool.coverage.report]
+show_missing = false
+precision = 1
+exclude_also = ['if __name__ == .__main__.:', 'raise AssertionError\("unreachable"\)']

@@ -23,5 +23,8 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
         except ValueError:
             continue
         marker = _DIRECTORY_MARKERS.get(relative.parts[0])
-        if marker is not None:
+        # An explicit tier wins over the directory (e.g. the retrieval-quality
+        # evaluation needs the integration database but is an evaluation).
+        explicit = any(item.get_closest_marker(t) for t in ("system", "evaluation"))
+        if marker is not None and not explicit:
             item.add_marker(marker)

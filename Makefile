@@ -2,7 +2,7 @@
 # OpsPilot â€” Makefile
 # =============================================================================
 .PHONY: help setup dev up down build test test-unit test-integration test-system \
-        test-evaluation test-db-up test-db-down test-web test-web-e2e demo demo-prepare demo-reset lint lint-web scan ingest ingest-docker rag-eval incident traffic cloud-up cloud-down clean
+        test-evaluation test-db-up test-db-down test-web test-web-e2e coverage demo demo-prepare demo-reset lint lint-web scan ingest ingest-docker rag-eval incident traffic cloud-up cloud-down clean
 
 COMPOSE := docker compose
 PYTHON  := python
@@ -42,14 +42,14 @@ build: ## Build Docker images
 # ---------------------------------------------------------------------------
 # Testing
 # ---------------------------------------------------------------------------
-test: ## Run all tests
-	pytest
+test: ## Unit + integration tests, Python and frontend (needs: make test-db-up)
+	$(PYTHON) scripts/run_tests.py all
 
-test-unit: ## Run unit tests only
-	pytest -m unit -v
+test-unit: ## Unit tier: pytest -m unit, Vitest, contrast check (no services needed)
+	$(PYTHON) scripts/run_tests.py unit
 
-test-integration: ## Run integration tests (needs: make test-db-up)
-	pytest -m integration -v
+test-integration: ## Integration tier: real PostgreSQL + in-process servers (needs: make test-db-up)
+	$(PYTHON) scripts/run_tests.py integration
 
 test-db-up: ## Start the disposable integration-test database (127.0.0.1:5433)
 	$(COMPOSE) --profile test up -d --wait postgres-test
@@ -60,11 +60,14 @@ test-db-down: ## Stop and discard the integration-test database
 migrate: ## Apply database migrations (uses DATABASE_URL)
 	cd apps/api && alembic upgrade head
 
-test-system: ## Run system / E2E tests
-	pytest -m system -v
+test-system: ## System tier: pytest -m system + Playwright against the running stack
+	$(PYTHON) scripts/run_tests.py system
 
-test-evaluation: ## Run agent evaluation tests
-	pytest -m evaluation -v
+test-evaluation: ## Evaluation tier: 16 agent scenarios + retrieval quality
+	$(PYTHON) scripts/run_tests.py evaluation
+
+coverage: ## Unit + integration with a coverage report (coverage.xml)
+	$(PYTHON) scripts/run_tests.py coverage --no-web
 
 test-web: ## Frontend: type-check, unit/component/security tests, contrast check
 	cd apps/web && npm run typecheck && npm test && npm run contrast

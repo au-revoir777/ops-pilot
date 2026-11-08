@@ -303,18 +303,19 @@ Timeouts return 504 `INVESTIGATION_TIMEOUT`, and the run is marked FAILED.
 ## Testing
 
 ```bash
-make test-unit         # no database needed
+make test-unit         # pytest -m unit + Vitest + contrast check; no services needed
 make test-db-up        # disposable Postgres on 127.0.0.1:5433 (tmpfs)
-make test-integration  # real PostgreSQL: migrations, repositories, API
-make test-db-down
-make test              # unit + integration (system/evaluation excluded)
-make test-system       # needs the running stack (see Observability)
-pytest -m evaluation   # retrieval quality with the real embedding model
-make lint              # Ruff lint + format check
-make test-web          # frontend: type-check, Vitest (unit, component, security), contrast
-make lint-web          # ESLint (react/no-danger is an error)
-make test-web-e2e      # Playwright + axe against the running stack (web on :3001)
+make test-integration  # real PostgreSQL, MCP protocol, workloads over HTTP
+make test              # unit + integration, Python and frontend
+make test-system       # the running stack: flagship scenario, MCP, observability, Playwright + axe
+make test-evaluation   # 16 agent scenarios + retrieval quality
+make coverage          # unit + integration with branch coverage
+make lint && make lint-web
 ```
+
+Without `make` (for example on Windows), use `python scripts/run_tests.py <tier>`.
+The strategy, what each tier proves, and the measured numbers are in
+[docs/testing.md](docs/testing.md).
 
 Integration tests read `TEST_DATABASE_URL` (default: the `postgres-test`
 Compose service) and refuse any database whose name does not end in `_test`.

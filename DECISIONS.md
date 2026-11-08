@@ -552,3 +552,28 @@
   - `--mode db` (database degradation, 90%, 35 s) and `--mode errors` (application errors, 90%, 36 s) each passed once.
   - The Playwright flagship test now follows the spec scenario through the UI and passes in 44 s.
   - Agent evaluation has 16 of 16 scenarios correct, including two new ones: plain latency, and latency after a recovered database incident.
+
+---
+
+## D-037: The testing pyramid is defined by markers, not folders, and enforced
+
+- **Date:** 2026-11-08 (Phase 10)
+- **Decision:** Tests stay next to the component they test (`apps/api/tests`, `mcp/tests`, `workloads/tests`, `apps/web/tests`, cross-cutting suites in `tests/`). The spec's `tests/{unit,integration,system,evaluation}` tree is expressed as four pytest markers.
+  - The root `conftest.py` fails collection when a test has no tier or more than one.
+  - Rejected: moving every test under one `tests/` tree. It would separate tests from their code across four independently built and deployed components, and break each component's self-contained Docker build and test context.
+- **Why enforcement:** the audit found 5 tests with no tier, which no tier command ran, and 1 with two tiers (the retrieval-quality evaluation sat in the integration folder). An explicit `system`/`evaluation` marker now wins over the folder default.
+- **One runner:** `scripts/run_tests.py <tier>` runs the Python and frontend parts of a tier together. Every `make test*` target calls it, so the result is the same with or without `make` (not installed on the Windows laptop).
+- **New tests:**
+  - an end-to-end prompt-injection integration test: a hostile runbook through ingest, pgvector, the real retriever, the agent, the API and storage;
+  - per-scenario evaluation tests (16), so a regression names the incident type;
+  - a determinism test;
+  - adapter unit tests: LLM request shapes, no key in errors, the MCP client's allow-list and failure paths, report rendering.
+- **Measured:**
+  - unit 309 Python + 64 Vitest + 237 contrast checks;
+  - integration 67;
+  - system 11 Python + 16 Playwright;
+  - evaluation 19;
+  - all passing.
+  - Branch coverage of unit + integration is 88.4% (lines 89.9%, branches 79.5%).
+  - Frontend coverage is not measured.
+- **Details:** `docs/testing.md`.
