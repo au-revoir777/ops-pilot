@@ -68,7 +68,7 @@
 | `app/agents/llm.py` | Optional LLM providers (none/openai/anthropic), labelled summaries |
 | `app/agents/models.py` | Report, observation, hypothesis, confidence models |
 | `app/agents/simulation.py` | Scenario replay: simulated MCP/RAG results for evaluation and tests |
-| `app/agents/evaluation.py` | Evaluation metrics over `tests/evaluation/cases.json` |
+| `app/agents/evaluation.py` | Evaluation metrics over `apps/api/app/agents/scenarios/cases.json` |
 | `app/agents/render.py` | Markdown rendering of a report |
 | `app/agents/run.py` | CLI: `python -m app.agents.run "question"` against the live stack |
 
@@ -218,12 +218,12 @@ Markdown with YAML front matter (`title`, `doc_type`, `services`, extras kept as
 | `observability/test_add_monitored_project.py` | Unit: onboarding script output and validation |
 | `system/test_mcp_stack.py` | System: MCP tools against the live stack, incl. a latency incident |
 | `system/test_observability_stack.py` | System (`pytest -m system`, needs the stack): targets up, rules loaded, Grafana, cross-service request trace in Loki, latency injection visible |
-| `evaluation/cases.json` | 14 agent evaluation scenarios |
+| `apps/api/app/agents/scenarios/cases.json` | 14 scenarios (evaluation, replay, tests) |
 | `evaluation/test_agent_evaluation.py` | `pytest -m evaluation`: runs the scenarios, writes `results/latest.json` |
 | `fixtures/rag_eval.yml` | Labelled retrieval questions (relevant + off-topic) |
 
 -----------|---------|
 | `system/` | *(Phase 10)* End-to-end system tests |
-| `evaluation/cases.json` | 14 agent evaluation scenarios |
+| `apps/api/app/agents/scenarios/cases.json` | 14 scenarios (evaluation, replay, tests) |
 | `evaluation/test_agent_evaluation.py` | `pytest -m evaluation`: runs the scenarios, writes `results/latest.json` |
 | `fixtures/rag_eval.yml` | Labelled retrieval questions (relevant + off-topic) |

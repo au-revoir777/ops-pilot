@@ -88,6 +88,7 @@ def report_events(report: InvestigationReport) -> list[EventSpec]:
         events.append((InvestigationEventType.TOOL_CALL, f"{call.tool} -> {call.status}", {
             "tool_name": call.tool, "arguments": call.arguments, "status": call.status,
             "latency_ms": call.duration_ms, "error": call.error,
+            "result_summary": call.result_summary,
         }))  # fmt: skip
     for hyp in report.hypotheses:
         events.append((InvestigationEventType.HYPOTHESIS, hyp.statement, {

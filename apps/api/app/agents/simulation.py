@@ -1,15 +1,17 @@
 """Scenario simulation: replay an incident's telemetry without a live stack.
 
 A scenario describes what each MCP tool and the knowledge base *would* return
-(see tests/evaluation/cases.json). ScenarioToolClient answers tool calls with
+(see app/agents/scenarios/cases.json). ScenarioToolClient answers tool calls with
 MCP-shaped results built from it, so the real agent graph runs unchanged. Used
 for the evaluation suite, deterministic unit tests and incident replay.
 """
 
 from __future__ import annotations
 
+import json
 import uuid
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import Any
 
 from app.agents.tools import ALLOWED_TOOLS, ToolNotAllowed
@@ -18,6 +20,14 @@ from app.rag.retrieval import RetrievalUnavailable, RetrievedChunk
 from app.rag.safety import detect_prompt_injection
 
 NOW = datetime(2026, 11, 8, 12, 0, tzinfo=UTC)
+CASES_FILE = Path(__file__).parent / "scenarios" / "cases.json"
+
+
+def load_cases() -> dict[str, Any]:
+    """The scenario catalogue (evaluation, replay and tests share one file)."""
+    return json.loads(CASES_FILE.read_text(encoding="utf-8"))
+
+
 STEP = timedelta(minutes=1)
 
 

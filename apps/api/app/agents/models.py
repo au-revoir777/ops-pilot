@@ -49,6 +49,8 @@ class ToolCall(BaseModel):
     status: str  # ok | partial | unavailable | error
     duration_ms: float
     error: str | None = None
+    result_summary: str | None = None  # e.g. '14 log entries', 'health=degraded'
+    result: dict[str, Any] | None = None  # trimmed raw result for inspection
 
 
 class ConfidenceBreakdown(BaseModel):

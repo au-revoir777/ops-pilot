@@ -65,6 +65,12 @@ class ServiceInfo(BaseModel):
     name: str
     project: str | None
     sources: list[Literal["registered", "telemetry"]]
+    # Filled when ?health=true (via the MCP get_service_health tool).
+    health: str | None = None
+    p95_latency_ms: float | None = None
+    error_rate: float | None = None
+    request_rate: float | None = None
+    version: str | None = None
 
 
 class ServicesResponse(BaseModel):
@@ -72,8 +78,13 @@ class ServicesResponse(BaseModel):
     telemetry_status: Literal["ok", "unavailable"]
 
 
+MAX_HEALTH_LOOKUPS = 25
+
+
 @router.get("/services", response_model=ServicesResponse)
-async def list_services(session: SessionDep, connector: McpConnectorDep) -> ServicesResponse:
+async def list_services(
+    session: SessionDep, connector: McpConnectorDep, health: bool = False
+) -> ServicesResponse:
     registered = (await session.execute(select(Workload.name))).scalars().all()
     found: dict[str, ServiceInfo] = {
         name: ServiceInfo(name=name, project=None, sources=["registered"]) for name in registered
@@ -84,17 +95,31 @@ async def list_services(session: SessionDep, connector: McpConnectorDep) -> Serv
             "query_metrics",
             {"query": "count by (service, project) (app_info)", "start_time": "now-15m"},
         )
-    if result.get("status") in {"unavailable", "error"}:
-        telemetry_status = "unavailable"
-    for series in result.get("series") or []:
-        labels = series.get("metric", {})
-        name = labels.get("service")
-        if not name:
-            continue
-        info = found.setdefault(name, ServiceInfo(name=name, project=None, sources=[]))
-        info.project = info.project or labels.get("project")
-        if "telemetry" not in info.sources:
-            info.sources.append("telemetry")
+        if result.get("status") in {"unavailable", "error"}:
+            telemetry_status = "unavailable"
+        for series in result.get("series") or []:
+            labels = series.get("metric", {})
+            name = labels.get("service")
+            if not name:
+                continue
+            info = found.setdefault(name, ServiceInfo(name=name, project=None, sources=[]))
+            info.project = info.project or labels.get("project")
+            if "telemetry" not in info.sources:
+                info.sources.append("telemetry")
+        if health:
+            targets = [s for s in found.values() if "telemetry" in s.sources][:MAX_HEALTH_LOOKUPS]
+            results = await asyncio.gather(
+                *(tools.call("get_service_health", {"service": s.name}) for s in targets)
+            )
+            for info, h in zip(targets, results, strict=True):
+                if h.get("status") in {"unavailable", "error"}:
+                    info.health = "unknown"
+                    continue
+                info.health = h.get("health")
+                info.p95_latency_ms = h.get("p95_latency_ms")
+                info.error_rate = h.get("error_rate")
+                info.request_rate = h.get("request_rate")
+                info.version = h.get("version")
     return ServicesResponse(
         services=sorted(found.values(), key=lambda s: s.name), telemetry_status=telemetry_status
     )
@@ -138,3 +163,32 @@ async def dependency_health(
     else:
         status = "ok"
     return DependencyHealth(status=status, timestamp=datetime.now(UTC).isoformat(), checks=checks)
+
+
+class PublicConfig(BaseModel):
+    """Configuration that is safe to show in the UI. Never secrets or connection strings."""
+
+    environment: str
+    version: str
+    read_only: bool
+    llm_provider: str
+    llm_model: str | None
+    incident_lab_enabled: bool
+    grafana_url: str | None
+
+
+@router.get("/config", response_model=PublicConfig)
+async def public_config() -> PublicConfig:
+    from app.routes.health import VERSION
+
+    settings = get_settings()
+    return PublicConfig(
+        environment=settings.app_env,
+        version=VERSION,
+        # The agent has no remediation endpoints at all (spec section 17).
+        read_only=True,
+        llm_provider=settings.llm_provider,
+        llm_model=settings.llm_model if settings.llm_provider != "none" else None,
+        incident_lab_enabled=settings.enable_incident_lab,
+        grafana_url=settings.public_grafana_url,
+    )

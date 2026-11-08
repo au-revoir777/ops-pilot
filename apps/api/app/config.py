@@ -99,6 +99,22 @@ class Settings(BaseSettings):
     agent_degraded_error_ratio: float = Field(default=0.05, ge=0, le=1)
     mcp_auth_token: SecretStr | None = Field(default=None, description="Bearer token for MCP")
 
+    # --- Incident lab (UI failure injection; demo workloads only, D-034) ---
+    enable_incident_lab: bool = Field(default=False)
+    lab_targets: dict[str, str] = Field(
+        default={
+            "checkout": "http://checkout:8080",
+            "payments": "http://payments:8081",
+            "users": "http://users:8082",
+        },
+        description="Demo services the lab may control, name -> internal base URL",
+    )
+    lab_traffic_target: str = Field(default="checkout")
+    public_grafana_url: str | None = Field(
+        default=None, description="Grafana link shown in the UI (browser-reachable URL)"
+    )
+    failure_admin_token: SecretStr | None = Field(default=None)
+
     # --- RAG ---
     rag_docs_path: str = Field(default="../../docs/knowledge", description="Knowledge base root")
     # Sizes are in words (whitespace tokens), not model tokens: ~300 words stays

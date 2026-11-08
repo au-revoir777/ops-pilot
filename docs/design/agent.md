@@ -149,7 +149,7 @@ probabilistic.
 
 ## Evaluation
 
-`tests/evaluation/cases.json` holds 14 scenarios:
+`apps/api/app/agents/scenarios/cases.json` holds 14 scenarios:
 
 - release + DB regression
 - DB-only slowness

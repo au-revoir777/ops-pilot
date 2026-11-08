@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Any
+from typing import Annotated, Any
 
-from fastapi import APIRouter, BackgroundTasks, Response
+from fastapi import APIRouter, BackgroundTasks, Query, Response
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.config import get_settings
@@ -111,6 +111,18 @@ async def create_investigation(
         return InvestigationDetail.model_validate(investigation)
     finished = await runner.run(investigation.id, window_minutes=data.window_minutes)
     return InvestigationDetail.model_validate(finished)
+
+
+@router.get("/investigations", response_model=list[InvestigationSummary])
+async def list_investigations(
+    service: InvestigationServiceDep,
+    status: InvestigationStatus | None = None,
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> list[InvestigationSummary]:
+    """Most recent investigations first (history view)."""
+    investigations = await service.list_investigations(limit=limit, offset=offset, status=status)
+    return [InvestigationSummary.model_validate(i) for i in investigations]
 
 
 @router.get("/investigations/{investigation_id}", response_model=InvestigationDetail)

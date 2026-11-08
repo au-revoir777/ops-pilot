@@ -86,6 +86,11 @@ class InvestigationService:
             raise InvestigationNotFound(f"Investigation {investigation_id} not found")
         return investigation
 
+    async def list_investigations(
+        self, *, limit: int = 50, offset: int = 0, status: InvestigationStatus | None = None
+    ) -> Sequence[Investigation]:
+        return await self.investigations.list_recent(limit=limit, offset=offset, status=status)
+
     async def list_for_incident(self, incident_id: uuid.UUID) -> Sequence[Investigation]:
         if await self.incidents.get(incident_id) is None:
             raise IncidentNotFound(f"Incident {incident_id} not found")

@@ -2,7 +2,7 @@
 
     pytest -m evaluation tests/evaluation/test_agent_evaluation.py
 
-Runs every scenario in cases.json through the real agent graph (simulated
+Runs every scenario in app/agents/scenarios/cases.json through the real agent graph (simulated
 MCP/RAG results, no LLM) and writes machine-readable results to
 tests/evaluation/results/latest.json.
 """
@@ -16,6 +16,7 @@ from pathlib import Path
 import pytest
 
 from app.agents.evaluation import evaluate
+from app.agents.simulation import CASES_FILE
 
 pytestmark = pytest.mark.evaluation
 
@@ -23,7 +24,7 @@ HERE = Path(__file__).parent
 
 
 async def test_agent_evaluation_suite():
-    summary = await evaluate(HERE / "cases.json")
+    summary = await evaluate(CASES_FILE)
     out = HERE / "results" / "latest.json"
     out.parent.mkdir(exist_ok=True)
     out.write_text(json.dumps(asdict(summary), indent=2, default=str), encoding="utf-8")

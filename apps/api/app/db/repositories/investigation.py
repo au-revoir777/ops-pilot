@@ -9,7 +9,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.db.models.investigation import Investigation, InvestigationEvent
+from app.db.models.investigation import Investigation, InvestigationEvent, InvestigationStatus
 
 
 class InvestigationRepository:
@@ -38,6 +38,16 @@ class InvestigationRepository:
             stmt = stmt.with_for_update(of=Investigation)
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
+
+    async def list_recent(
+        self, *, limit: int = 50, offset: int = 0, status: InvestigationStatus | None = None
+    ) -> Sequence[Investigation]:
+        stmt = select(Investigation)
+        if status is not None:
+            stmt = stmt.where(Investigation.status == status)
+        stmt = stmt.order_by(Investigation.created_at.desc(), Investigation.id.desc())
+        result = await self.session.execute(stmt.limit(limit).offset(offset))
+        return result.scalars().all()
 
     async def list_for_incident(self, incident_id: uuid.UUID) -> Sequence[Investigation]:
         stmt = (

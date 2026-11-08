@@ -4,9 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import copy
-import json
 from datetime import timedelta
-from pathlib import Path
 
 import pytest
 
@@ -15,15 +13,11 @@ from app.agents import reasoning
 from app.agents.graph import InvestigationAgent
 from app.agents.llm import LLMUnavailable, build_llm, extract_service
 from app.agents.models import Observation, RetrievedEvidence
-from app.agents.simulation import NOW, ScenarioRetriever, ScenarioToolClient
+from app.agents.simulation import NOW, ScenarioRetriever, ScenarioToolClient, load_cases
 from app.agents.tools import McpToolClient, ToolNotAllowed
 from app.config import Settings
 
-CASES = json.loads(
-    (Path(__file__).resolve().parents[4] / "tests/evaluation/cases.json").read_text(
-        encoding="utf-8"
-    )
-)
+CASES = load_cases()
 CASE = {c["id"]: c for c in CASES["cases"]}
 KNOWLEDGE = CASES["knowledge_sets"]
 

@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 import pytest
 from fastapi import FastAPI
 from httpx import AsyncClient
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Incident, Investigation, InvestigationStatus
@@ -176,3 +176,44 @@ async def test_dependency_health(app: FastAPI, client: AsyncClient, mcp_up, expe
     assert body["checks"]["knowledge_base"] == "empty"  # nothing ingested in this test DB
     assert body["checks"]["llm"] == "disabled"
     assert body["status"] == "degraded"
+
+
+async def test_list_investigations_newest_first(client: AsyncClient, db_session: AsyncSession):
+    first = (await client.post("/api/investigations", json=QUESTION)).json()
+    second = (await client.post("/api/investigations", json=QUESTION)).json()
+    # Both rows share one test transaction, so now() gives them the same created_at;
+    # age the first one explicitly to make the ordering observable.
+    await db_session.execute(
+        text(
+            "UPDATE investigations SET created_at = created_at - interval '1 minute' WHERE id = :id"
+        ),
+        {"id": first["id"]},
+    )
+    listed = (await client.get("/api/investigations")).json()
+    assert [i["id"] for i in listed[:2]] == [second["id"], first["id"]]
+    assert listed[0]["root_cause"] == "deployment_db_regression"
+    assert "report" not in listed[0]  # summaries only
+    completed = (await client.get("/api/investigations", params={"status": "completed"})).json()
+    assert len(completed) == 2
+    assert (await client.get("/api/investigations", params={"limit": 0})).status_code == 422
+
+
+class PerToolFake:
+    async def call(self, tool, arguments):
+        if tool == "query_metrics":
+            return {"status": "ok", "series": [{"metric": {"service": "checkout"}, "points": []}]}
+        return {"status": "ok", "health": "degraded", "p95_latency_ms": 2100.0,
+                "error_rate": 0.0, "request_rate": 3.2, "version": "1.8.2"}  # fmt: skip
+
+
+async def test_services_with_health(app: FastAPI, client: AsyncClient):
+    @asynccontextmanager
+    async def connect():
+        yield PerToolFake()
+
+    app.dependency_overrides[get_mcp_connector] = lambda: connect
+    body = (await client.get("/api/services", params={"health": "true"})).json()
+    [checkout] = body["services"]
+    assert checkout["health"] == "degraded"
+    assert checkout["p95_latency_ms"] == 2100.0
+    assert checkout["version"] == "1.8.2"

@@ -68,6 +68,44 @@ class AgentState(TypedDict, total=False):
     llm: dict[str, Any]
 
 
+MAX_RESULT_ITEMS = 20
+
+
+def summarise_result(tool: str, result: dict[str, Any]) -> str:
+    """One line describing what a tool returned (shown next to the call in the UI)."""
+    status = result.get("status", "ok")
+    if status in {"unavailable", "error"}:
+        errors = result.get("errors") or [{}]
+        return f"{status}: {errors[0].get('error', 'unknown error')}"
+    counts = {
+        "query_metrics": ("series", "series"),
+        "get_recent_logs": ("entries", "log entries"),
+        "get_recent_deployments": ("deployments", "versions"),
+        "get_service_dependencies": ("dependencies", "dependencies"),
+        "get_incident_events": ("events", "events"),
+    }
+    if tool == "get_service_health":
+        return f"health={result.get('health')}, p95={result.get('p95_latency_ms')} ms"
+    if tool in counts:
+        key, label = counts[tool]
+        return f"{len(result.get(key) or [])} {label}" + (
+            " (partial)" if status == "partial" else ""
+        )
+    return status
+
+
+def trim_result(result: dict[str, Any]) -> dict[str, Any]:
+    """Keep stored results small: lists are cut to MAX_RESULT_ITEMS entries."""
+    trimmed: dict[str, Any] = {}
+    for key, value in result.items():
+        if isinstance(value, list) and len(value) > MAX_RESULT_ITEMS:
+            trimmed[key] = value[:MAX_RESULT_ITEMS]
+            trimmed[f"{key}_truncated"] = len(value) - MAX_RESULT_ITEMS
+        else:
+            trimmed[key] = value
+    return trimmed
+
+
 def _key(call: dict[str, Any]) -> str:
     args = ",".join(f"{k}={call['arguments'][k]}" for k in sorted(call["arguments"]))
     return f"{call['tool']}({args})"
@@ -329,6 +367,8 @@ class InvestigationAgent:
                     status=result.get("status", "ok"),
                     duration_ms=round(ms, 1),
                     error=errors[0].get("error") if errors else None,
+                    result_summary=summarise_result(call["tool"], result),
+                    result=trim_result(result),
                 )
             )
 

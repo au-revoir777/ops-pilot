@@ -1,6 +1,6 @@
 """Agent evaluation: run every scenario through the real graph and score it.
 
-    python -m app.agents.evaluation --cases ../../tests/evaluation/cases.json \
+    python -m app.agents.evaluation [--cases app/agents/scenarios/cases.json] \
         --output ../../tests/evaluation/results/latest.json
 
 Metrics (spec section 24), all computed from actual runs:
@@ -25,7 +25,7 @@ from typing import Any
 
 from app.agents.graph import InvestigationAgent
 from app.agents.models import InvestigationReport
-from app.agents.simulation import NOW, ScenarioRetriever, ScenarioToolClient
+from app.agents.simulation import CASES_FILE, NOW, ScenarioRetriever, ScenarioToolClient
 from app.config import Settings
 
 
@@ -131,7 +131,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawTextHelpFormatter
     )
-    parser.add_argument("--cases", type=Path, default=Path("../../tests/evaluation/cases.json"))
+    parser.add_argument("--cases", type=Path, default=CASES_FILE)
     parser.add_argument("--output", type=Path, default=None)
     args = parser.parse_args()
     summary = asdict(asyncio.run(evaluate(args.cases)))

@@ -18,7 +18,6 @@ Services behave exactly as in production, and nothing leaks between tests.
 
 from __future__ import annotations
 
-import json
 import os
 from collections.abc import AsyncGenerator, Iterator
 from contextlib import asynccontextmanager
@@ -33,17 +32,13 @@ from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, AsyncSession, create_async_engine
 
 from app.agents.graph import InvestigationAgent
-from app.agents.simulation import NOW, ScenarioRetriever, ScenarioToolClient
+from app.agents.simulation import NOW, ScenarioRetriever, ScenarioToolClient, load_cases
 from app.config import Settings, assert_test_database_url
 from app.db.session import get_db_session
 from app.dependencies import get_agent_factory, get_background_session_factory
 from app.main import create_app
 
-EVAL_CASES = json.loads(
-    (Path(__file__).resolve().parents[4] / "tests/evaluation/cases.json").read_text(
-        encoding="utf-8"
-    )
-)
+EVAL_CASES = load_cases()
 
 # Throwaway credentials for the local tmpfs test container only.
 DEFAULT_TEST_DATABASE_URL = (

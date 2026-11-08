@@ -417,7 +417,7 @@
   - Confidence = clamp(0.10 base + temporal 0.25 + metric 0.25 + log 0.20 + deployment 0.10 + knowledge 0.10 − 0.25 per contradiction, 0, 0.95) × (0.6 + 0.4 × coverage).
   - Root causes are reported from 0.25 confidence, and labelled tentative below 0.5.
   - Deploy and onset times get a ±2 minute tolerance, because both come from 1-minute-resolution telemetry.
-- **Evaluation:** 14 simulated scenarios (`tests/evaluation/cases.json`). All 14 have the correct root cause and service, evidence grounding is 1.0, tool selection 1.0, and the unsupported-claim rate is 0.
+- **Evaluation:** 14 simulated scenarios (`apps/api/app/agents/scenarios/cases.json`). All 14 have the correct root cause and service, evidence grounding is 1.0, tool selection 1.0, and the unsupported-claim rate is 0.
   - Caveat: these scenarios were written together with the rules.
   - One threshold change was made after seeing results: the reportable minimum was lowered from 0.3 to 0.25, so a logs-only diagnosis with Prometheus down is reported as *tentative* instead of not at all.
 - **Live check:** a staged release-plus-slow-database incident was diagnosed as "Release 1.8.5 of checkout introduced a database query regression" (95% heuristic confidence), with a recommended rollback to 1.8.4.
