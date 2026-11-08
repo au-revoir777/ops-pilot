@@ -122,3 +122,71 @@
 - **Alternatives:** Build fully functional, elaborate e-commerce business applications.
 - **Decision:** Keep checkout, payments, and users intentionally lightweight. Their primary purpose is to generate realistic operational telemetry (metrics, logs, traces) and reproducible incidents.
 - **Consequences:** Development time is focused on the core SRE Copilot and investigation agent rather than bloated business logic in demo workloads.
+
+---
+
+## D-013: Async SQLAlchemy 2.x with one engine per process
+
+- **Date:** 2026-11-08 (Phase 1)
+- **Context:** The API is async (FastAPI), and each request needs a database session without paying connection setup costs.
+- **Alternatives:** Sync SQLAlchemy in a threadpool; an engine per request; raw asyncpg.
+- **Decision:** `create_async_engine` (asyncpg driver) is created once in the FastAPI lifespan and disposed on shutdown. A request-scoped `AsyncSession` comes from `async_sessionmaker` through the `get_db_session` dependency. Pool size, max overflow, timeout, recycle and pre-ping are all configured through settings (`DB_POOL_*`). Sessions use `expire_on_commit=False`, so committed objects can still be serialised without lazy loads (lazy loads are not allowed under asyncio).
+- **Consequences:** One bounded pool per process. Pool sizing is part of capacity planning: `(pool_size + max_overflow) × replicas` must stay under PostgreSQL `max_connections`.
+
+---
+
+## D-014: Services own the transaction boundary; repositories never commit
+
+- **Date:** 2026-11-08 (Phase 1)
+- **Context:** One use case often touches several tables. For example, opening an investigation also moves the incident to `investigating` and writes the first timeline event. Those writes must succeed or fail together.
+- **Alternatives:** Commit inside every repository method (partial writes on failure); commit in route handlers (business logic leaks into HTTP); a full Unit-of-Work framework (too much machinery for this size).
+- **Decision:** Repositories only `add`/`flush`/`select`. Each state-changing service method wraps its whole unit of work in `async with transaction(session, "<operation>")` (`app/services/transactions.py`), which commits on success and rolls back on any exception. Driver errors are logged by type only and re-raised as `DatabaseOperationError` (HTTP 503 with a generic message). Rows whose state machine is being changed are locked with `SELECT … FOR UPDATE` (incident status changes, investigation events and sequence numbers).
+- **Consequences:** Atomic multi-table operations, and lifecycle rules are enforced in one place. Routes are thin. Integration tests verify that a failure mid-operation leaves no partial writes.
+
+---
+
+## D-015: Initial domain model
+
+- **Date:** 2026-11-08 (Phase 1)
+- **Decision:** Four tables:
+  - `workloads`: the monitored service (unique `name`, matching the metrics/log label). Incidents reference it by FK (`ON DELETE RESTRICT`). A workload is registered automatically the first time an incident names it.
+  - `incidents`: native enums for status and severity, `resolved_at`. Indexes follow the actual query patterns: `(status, created_at)` for filtered lists, `created_at` for unfiltered lists, `workload_id` for the FK.
+  - `investigations`: FK to incident (`ON DELETE CASCADE`), lifecycle status, `started_at`/`completed_at`, `summary`.
+  - `investigation_events`: an append-only timeline (status changes, tool calls, evidence, hypotheses, conclusions) with a per-investigation `sequence` (unique together with `investigation_id`, which also serves as the lookup index). `details` is the only JSONB column, because tool output and evidence really are semi-structured.
+  - UUID primary keys and timezone-aware `created_at`/`updated_at` set by the database clock. Enums store lowercase values. Lifecycle transitions are explicit tables in the service layer.
+- **Not modelled yet (on purpose):** deployments, hypotheses as entities, users/auth, documents/embeddings. They arrive with the phases that need them.
+
+---
+
+## D-016: pgvector enabled now, vector columns deferred to Phase 4
+
+- **Date:** 2026-11-08 (Phase 1)
+- **Context:** A pgvector column needs a fixed dimension, and the dimension depends on the embedding model, which has not been chosen. The `EMBEDDING_DIMENSIONS=1536` setting is only a placeholder.
+- **Decision:** Migration `0001` runs `CREATE EXTENSION IF NOT EXISTS vector`, and the integration tests check that vector operators work. No embedding table or column is created until Phase 4 selects and documents the model. Phase 4 then adds its own migration with the real dimension and index type (HNSW vs IVFFlat).
+- **Consequences:** No guessed dimension baked into the schema, so no later rewrite of a vector column. The extension is still available in every environment from day one.
+
+---
+
+## D-017: Pinned `pgvector/pgvector:0.8.0-pg16` image; database never publicly exposed
+
+- **Date:** 2026-11-08 (Phase 1)
+- **Decision:** Local dev, the test database and CI all use the same pinned image, so the PostgreSQL major version and pgvector version cannot drift. In Compose, Postgres runs on a dedicated `backend` network with a named volume and a `pg_isready` health check. Its port is published only on `127.0.0.1` (configurable through `POSTGRES_PORT`) for local tools. In the cloud architecture it is RDS in private subnets with no public endpoint. Migrations run as a one-shot `migrate` service, and the API waits for it to succeed (`service_completed_successfully`).
+- **Consequences:** Upgrading Postgres or pgvector becomes a deliberate change in one place, not something that happens when a `latest` tag moves.
+
+---
+
+## D-018: Integration tests use real PostgreSQL with transaction rollback isolation
+
+- **Date:** 2026-11-08 (Phase 1)
+- **Context:** Mocked databases do not catch problems with constraints, enums, cascades, migrations or locking.
+- **Alternatives:** SQLite (different dialect, no pgvector/JSONB/enums); truncating tables between tests (slower, order-dependent); a database per test (slow).
+- **Decision:** A disposable `postgres-test` service (tmpfs storage, `127.0.0.1:5433`) locally and the same image as a GitHub Actions service container in CI. The schema is built once per session with the real Alembic migrations. Each test opens a connection and an outer transaction. The session joins it with `join_transaction_mode="create_savepoint"`, so service `commit()`/`rollback()` act on SAVEPOINTs, and the outer transaction is rolled back after the test. Tests are marked by directory (`unit`, `integration`). Unit tests never need a database.
+- **Safeguard:** Test fixtures and `APP_ENV=test` refuse any database whose name does not end in `_test`. That makes it hard for a test run to wipe a development or production database by mistake.
+
+---
+
+## D-019: Centralized, non-leaking error handling with correlation IDs
+
+- **Date:** 2026-11-08 (Phase 1)
+- **Decision:** Domain exceptions carry a stable `code` and HTTP status (`*_NOT_FOUND` → 404, `INVALID_*_STATE` → 409, `DATABASE_ERROR` → 503). One handler renders `{"error": {"code", "message", "request_id"}}`. 5xx responses never include internal messages. Unhandled exceptions are logged with their traceback on the server and return a generic 500. A pure-ASGI middleware binds an `X-Request-ID` (reused if the client's value is safe, otherwise generated) to structlog context vars and echoes it in the response. `DATABASE_URL` is a `SecretStr`. SQL errors are logged by exception type only, and slow queries (over `DB_SLOW_QUERY_MS`) log the SQL text without bound parameters.
+- **Consequences:** Every log line for a request can be correlated, and no credentials, SQL or stack traces reach API clients.

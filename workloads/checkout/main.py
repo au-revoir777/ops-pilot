@@ -23,7 +23,9 @@ SERVICE_NAME = os.getenv("SERVICE_NAME", "checkout")
 PORT = int(os.getenv("PORT", "8080"))
 FAILURE_MODE = os.getenv("FAILURE_MODE", "none")
 ENABLE_FAILURE_INJECTION = os.getenv("ENABLE_FAILURE_INJECTION", "false").lower() in (
-    "true", "1", "yes"
+    "true",
+    "1",
+    "yes",
 )
 VERSION = os.getenv("SERVICE_VERSION", "1.8.2")
 
@@ -118,9 +120,9 @@ async def checkout() -> dict:
 
         # ----- Normal response -----
         latency = time.monotonic() - start
-        REQUEST_LATENCY.labels(
-            service=SERVICE_NAME, method="POST", endpoint=endpoint
-        ).observe(latency)
+        REQUEST_LATENCY.labels(service=SERVICE_NAME, method="POST", endpoint=endpoint).observe(
+            latency
+        )
         REQUEST_COUNT.labels(
             service=SERVICE_NAME, method="POST", endpoint=endpoint, status="200"
         ).inc()

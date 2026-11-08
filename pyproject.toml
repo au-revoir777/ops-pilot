@@ -24,6 +24,7 @@ select = [
 ignore = [
     "S101",  # allow assert in tests
     "S104",  # allow binding to 0.0.0.0
+    "N818",  # allow custom exception names without Error suffix
 ]
 
 [tool.ruff.lint.isort]
@@ -32,6 +33,8 @@ known-first-party = ["app", "mcp"]
 [tool.pytest.ini_options]
 testpaths = ["apps/api/tests", "mcp/tests", "tests"]
 asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+addopts = "--strict-markers"
 markers = [
     "unit: Unit tests (no external deps)",
     "integration: Integration tests (require DB/services)",

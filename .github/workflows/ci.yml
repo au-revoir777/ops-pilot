@@ -50,12 +50,54 @@ jobs:
         working-directory: .
 
   # ---------------------------------------------------------------------------
+  # Integration Tests
+  # ---------------------------------------------------------------------------
+  test-integration:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: lint
+    # Same image and database layout as the local `postgres-test` Compose service.
+    services:
+      postgres:
+        image: pgvector/pgvector:0.8.0-pg16
+        env:
+          POSTGRES_USER: opspilot_test
+          POSTGRES_PASSWORD: opspilot_test
+          POSTGRES_DB: opspilot_test
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U opspilot_test -d opspilot_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      APP_ENV: test
+      DATABASE_URL: postgresql+asyncpg://opspilot_test:opspilot_test@127.0.0.1:5433/opspilot_test
+      TEST_DATABASE_URL: postgresql+asyncpg://opspilot_test:opspilot_test@127.0.0.1:5433/opspilot_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: pip install -r apps/api/requirements.txt
+      - name: Migration round-trip (upgrade, downgrade, re-upgrade)
+        working-directory: apps/api
+        run: |
+          alembic upgrade head
+          alembic downgrade base
+          alembic upgrade head
+      - name: Run integration tests
+        run: pytest -m integration -v --tb=short
+
+  # ---------------------------------------------------------------------------
   # Build Docker Images
   # ---------------------------------------------------------------------------
   build:
     name: Build Docker Images
     runs-on: ubuntu-latest
-    needs: test-unit
+    needs: [test-unit, test-integration]
     steps:
       - uses: actions/checkout@v4
       - name: Build API image

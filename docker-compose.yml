@@ -1,5 +1,5 @@
 # =============================================================================
-# OpsPilot — Docker Compose (Local Development)
+# OpsPilot â€” Docker Compose (Local Development)
 # =============================================================================
 # Start: docker compose up -d --build
 # Stop:  docker compose down -v
@@ -9,42 +9,93 @@ services:
   # -------------------------------------------------------------------------
   # PostgreSQL + pgvector
   # -------------------------------------------------------------------------
+  # Pinned image (pgvector 0.8.0 on PostgreSQL 16): reproducible builds and the
+  # same extension version locally, in CI and in tests. See DECISIONS.md D-017.
+  # The port is bound to 127.0.0.1 for local tooling only; in the cloud
+  # architecture the database sits in private subnets and is never published.
   postgres:
-    image: pgvector/pgvector:pg16
+    image: pgvector/pgvector:0.8.0-pg16
     container_name: opspilot-postgres
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-opspilot}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-opspilot_dev}
       POSTGRES_DB: ${POSTGRES_DB:-opspilot}
     ports:
-      - "5432:5432"
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+    networks:
+      - backend
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U opspilot"]
-      interval: 10s
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+
+  # Disposable database for integration tests (profile "test"): tmpfs storage,
+  # so every container start is a clean, empty database.
+  #   docker compose --profile test up -d postgres-test
+  postgres-test:
+    profiles: ["test"]
+    image: pgvector/pgvector:0.8.0-pg16
+    container_name: opspilot-postgres-test
+    environment:
+      POSTGRES_USER: opspilot_test
+      POSTGRES_PASSWORD: opspilot_test
+      POSTGRES_DB: opspilot_test
+    ports:
+      - "127.0.0.1:5433:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U opspilot_test -d opspilot_test"]
+      interval: 2s
+      timeout: 5s
+      retries: 15
+
+  # -------------------------------------------------------------------------
+  # Schema migrations (one-shot): the API starts only after this succeeds.
+  # -------------------------------------------------------------------------
+  migrate:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    image: opspilot-api:local
+    container_name: opspilot-migrate
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-opspilot}:${POSTGRES_PASSWORD:-opspilot_dev}@postgres:5432/${POSTGRES_DB:-opspilot}
+    networks:
+      - backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
 
   # -------------------------------------------------------------------------
   # OpsPilot API
   # -------------------------------------------------------------------------
   api:
-    build:
-      context: ./apps/api
-      dockerfile: Dockerfile
+    image: opspilot-api:local
     container_name: opspilot-api
-    env_file: .env
+    env_file:
+      - path: .env
+        required: false
     environment:
-      DATABASE_URL: postgresql+asyncpg://opspilot:opspilot_dev@postgres:5432/opspilot
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-opspilot}:${POSTGRES_PASSWORD:-opspilot_dev}@postgres:5432/${POSTGRES_DB:-opspilot}
       MCP_SERVER_URL: http://mcp:8001
       PROMETHEUS_URL: http://prometheus:9090
       LOKI_URL: http://loki:3100
     ports:
       - "8000:8000"
+    networks:
+      - default
+      - backend
     depends_on:
-      postgres:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     restart: unless-stopped
 
   # -------------------------------------------------------------------------
@@ -55,7 +106,9 @@ services:
       context: ./mcp
       dockerfile: Dockerfile
     container_name: opspilot-mcp
-    env_file: .env
+    env_file:
+      - path: .env
+        required: false
     environment:
       PROMETHEUS_URL: http://prometheus:9090
       LOKI_URL: http://loki:3100
@@ -158,6 +211,10 @@ services:
     depends_on:
       - api
     restart: unless-stopped
+
+networks:
+  # Database traffic only. Postgres is attached to nothing else.
+  backend:
 
 volumes:
   pgdata:

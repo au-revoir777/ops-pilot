@@ -62,9 +62,7 @@ def query_metrics(query: str, start_time: str, end_time: str) -> dict:
 
 
 @mcp.tool()
-def get_recent_logs(
-    service: str, minutes: int = 30, severity: str | None = None
-) -> dict:
+def get_recent_logs(service: str, minutes: int = 30, severity: str | None = None) -> dict:
     """Retrieve recent logs for a service.
 
     Args:

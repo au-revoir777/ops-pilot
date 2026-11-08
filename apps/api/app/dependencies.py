@@ -1,14 +1,26 @@
-"""FastAPI dependency injection providers.
-
-Centralizes database sessions, settings, and service dependencies
-so they can be injected into route handlers.
-"""
+"""FastAPI dependency injection providers."""
 
 from __future__ import annotations
 
-from app.config import Settings, get_settings
+from typing import Annotated
+
+from fastapi import Depends
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.db.session import get_db_session
+from app.services.incident import IncidentService
+from app.services.investigation import InvestigationService
+
+SessionDep = Annotated[AsyncSession, Depends(get_db_session)]
 
 
-def get_current_settings() -> Settings:
-    """Dependency: return application settings."""
-    return get_settings()
+def get_incident_service(session: SessionDep) -> IncidentService:
+    return IncidentService(session)
+
+
+def get_investigation_service(session: SessionDep) -> InvestigationService:
+    return InvestigationService(session)
+
+
+IncidentServiceDep = Annotated[IncidentService, Depends(get_incident_service)]
+InvestigationServiceDep = Annotated[InvestigationService, Depends(get_investigation_service)]

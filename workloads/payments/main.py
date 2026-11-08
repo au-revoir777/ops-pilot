@@ -14,11 +14,13 @@ PORT = int(os.getenv("PORT", "8081"))
 VERSION = os.getenv("SERVICE_VERSION", "2.1.0")
 
 REQUEST_COUNT = Counter(
-    "http_requests_total", "Total HTTP requests",
+    "http_requests_total",
+    "Total HTTP requests",
     ["service", "method", "endpoint", "status"],
 )
 REQUEST_LATENCY = Histogram(
-    "http_request_duration_seconds", "HTTP request latency",
+    "http_request_duration_seconds",
+    "HTTP request latency",
     ["service", "method", "endpoint"],
     buckets=[0.01, 0.05, 0.1, 0.25, 0.5, 1.0, 2.0, 5.0],
 )
@@ -48,7 +50,7 @@ async def process_payment() -> dict:
     REQUEST_COUNT.labels(
         service=SERVICE_NAME, method="POST", endpoint="/process", status="200"
     ).inc()
-    REQUEST_LATENCY.labels(
-        service=SERVICE_NAME, method="POST", endpoint="/process"
-    ).observe(latency)
+    REQUEST_LATENCY.labels(service=SERVICE_NAME, method="POST", endpoint="/process").observe(
+        latency
+    )
     return {"status": "processed", "service": SERVICE_NAME, "version": VERSION}

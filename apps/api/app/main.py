@@ -4,26 +4,37 @@ Responsibilities:
   - Create and configure the FastAPI app
   - Mount routers
   - Configure CORS
-  - Configure structured logging
-  - Expose lifespan hooks for startup / shutdown
+  - Configure structured logging and per-request correlation IDs
+  - Map domain exceptions to structured error responses
+  - Create / dispose the database engine in the lifespan
 """
 
 from __future__ import annotations
 
 import logging
+import re
+import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 import structlog
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from app.config import get_settings
+from app.db.session import close_db_engine, init_engine
 from app.routes import chat, health, incidents, investigations
+from app.services.exceptions import OpsPilotError
+
+REQUEST_ID_HEADER = "X-Request-ID"
+_VALID_REQUEST_ID = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
 
 # ---------------------------------------------------------------------------
 # Structured logging setup
 # ---------------------------------------------------------------------------
+
 
 def _configure_logging(log_level: str) -> None:
     """Configure structlog for JSON-based structured logging."""
@@ -36,6 +47,7 @@ def _configure_logging(log_level: str) -> None:
             structlog.stdlib.PositionalArgumentsFormatter(),
             structlog.processors.TimeStamper(fmt="iso"),
             structlog.processors.StackInfoRenderer(),
+            structlog.processors.format_exc_info,
             structlog.processors.UnicodeDecoder(),
             structlog.processors.JSONRenderer(),
         ],
@@ -48,27 +60,100 @@ def _configure_logging(log_level: str) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Correlation IDs
+# ---------------------------------------------------------------------------
+
+
+class CorrelationIdMiddleware:
+    """Bind a request ID to structlog's context and echo it in the response.
+
+    An incoming X-Request-ID is reused only if it is short and URL-safe, so a
+    client cannot inject arbitrary content into the logs.
+    """
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        incoming = dict(scope["headers"]).get(REQUEST_ID_HEADER.lower().encode(), b"").decode()
+        request_id = incoming if _VALID_REQUEST_ID.match(incoming) else uuid.uuid4().hex
+
+        structlog.contextvars.clear_contextvars()
+        structlog.contextvars.bind_contextvars(request_id=request_id)
+
+        async def send_with_request_id(message: Message) -> None:
+            if message["type"] == "http.response.start":
+                message.setdefault("headers", []).append(
+                    (REQUEST_ID_HEADER.lower().encode(), request_id.encode())
+                )
+            await send(message)
+
+        await self.app(scope, receive, send_with_request_id)
+
+
+def _current_request_id() -> str | None:
+    return structlog.contextvars.get_contextvars().get("request_id")
+
+
+# ---------------------------------------------------------------------------
 # Lifespan
 # ---------------------------------------------------------------------------
 
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
-    """Startup and shutdown hooks."""
+    """Create the single engine/pool at startup; dispose of it on shutdown."""
     settings = get_settings()
     _configure_logging(settings.log_level)
     logger = structlog.get_logger("opspilot.startup")
-    logger.info(
-        "opspilot_starting",
-        env=settings.app_env,
-        api_port=settings.api_port,
+    init_engine(settings)
+    logger.info("opspilot_starting", env=settings.app_env, api_port=settings.api_port)
+    try:
+        yield
+    finally:
+        await close_db_engine()
+        logger.info("opspilot_shutdown")
+
+
+# ---------------------------------------------------------------------------
+# Exception handlers
+# ---------------------------------------------------------------------------
+
+
+def _error_body(code: str, message: str) -> dict[str, object]:
+    return {"error": {"code": code, "message": message, "request_id": _current_request_id()}}
+
+
+async def opspilot_error_handler(request: Request, exc: OpsPilotError) -> JSONResponse:
+    """Map domain errors to their HTTP status. Server-side errors hide their message."""
+    logger = structlog.get_logger("opspilot.errors")
+    if exc.status_code >= 500:
+        logger.error("request_failed", path=request.url.path, code=exc.code)
+        message = "The request could not be completed. Please retry later."
+    else:
+        logger.info("request_rejected", path=request.url.path, code=exc.code)
+        message = str(exc)
+    return JSONResponse(status_code=exc.status_code, content=_error_body(exc.code, message))
+
+
+async def unhandled_error_handler(request: Request, exc: Exception) -> JSONResponse:
+    """Last resort: log the traceback server-side, return a generic 500."""
+    structlog.get_logger("opspilot.errors").exception(
+        "unhandled_exception", path=request.url.path, error_type=type(exc).__name__
     )
-    yield
-    logger.info("opspilot_shutdown")
+    return JSONResponse(
+        status_code=500, content=_error_body("INTERNAL_ERROR", "Internal server error")
+    )
 
 
 # ---------------------------------------------------------------------------
 # Application factory
 # ---------------------------------------------------------------------------
+
 
 def create_app() -> FastAPI:
     """Build the FastAPI application."""
@@ -83,16 +168,20 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
-    # -- CORS --
+    app.add_exception_handler(OpsPilotError, opspilot_error_handler)
+    app.add_exception_handler(Exception, unhandled_error_handler)
+
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.api_cors_origins,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
+        expose_headers=[REQUEST_ID_HEADER],
     )
+    # Added last so it is the outermost middleware and wraps everything else.
+    app.add_middleware(CorrelationIdMiddleware)
 
-    # -- Routers --
     app.include_router(health.router, tags=["Health"])
     app.include_router(incidents.router, prefix="/api", tags=["Incidents"])
     app.include_router(investigations.router, prefix="/api", tags=["Investigations"])

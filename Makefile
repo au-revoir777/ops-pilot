@@ -1,8 +1,8 @@
 # =============================================================================
-# OpsPilot — Makefile
+# OpsPilot â€” Makefile
 # =============================================================================
 .PHONY: help setup dev up down build test test-unit test-integration test-system \
-        test-evaluation lint scan ingest incident cloud-up cloud-down clean
+        test-evaluation test-db-up test-db-down migrate lint scan ingest incident cloud-up cloud-down clean
 
 COMPOSE := docker compose
 PYTHON  := python
@@ -15,7 +15,7 @@ help: ## Show this help
 # Setup
 # ---------------------------------------------------------------------------
 setup: ## Initial project setup
-	@echo "==> Copying .env.example → .env (if missing)"
+	@echo "==> Copying .env.example â†’ .env (if missing)"
 	@if not exist .env copy .env.example .env
 	@echo "==> Installing Python dependencies"
 	pip install -r apps/api/requirements.txt
@@ -48,8 +48,17 @@ test: ## Run all tests
 test-unit: ## Run unit tests only
 	pytest -m unit -v
 
-test-integration: ## Run integration tests only
+test-integration: ## Run integration tests (needs: make test-db-up)
 	pytest -m integration -v
+
+test-db-up: ## Start the disposable integration-test database (127.0.0.1:5433)
+	$(COMPOSE) --profile test up -d --wait postgres-test
+
+test-db-down: ## Stop and discard the integration-test database
+	$(COMPOSE) --profile test rm -sf postgres-test
+
+migrate: ## Apply database migrations (uses DATABASE_URL)
+	cd apps/api && alembic upgrade head
 
 test-system: ## Run system / E2E tests
 	pytest -m system -v
