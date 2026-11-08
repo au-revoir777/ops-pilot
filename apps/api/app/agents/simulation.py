@@ -46,10 +46,13 @@ def _history(spec: dict[str, Any] | str | None, window_minutes: int, now: dateti
         return []
     if spec == "flat":
         spec = {"baseline_s": 0.04, "current_s": 0.04, "step_minutes_ago": 0}
+    earlier = spec.get("earlier")  # a recovered spike: {from_minutes_ago, to_minutes_ago, value_s}
     points = []
     for minute in range(window_minutes, -1, -1):
         stepped = spec.get("step_minutes_ago", 0) and minute <= spec["step_minutes_ago"]
         value = spec["current_s"] if stepped else spec["baseline_s"]
+        if earlier and earlier["to_minutes_ago"] <= minute <= earlier["from_minutes_ago"]:
+            value = earlier["value_s"]
         points.append({"timestamp": (now - minute * STEP).isoformat(), "value": value})
     return points
 
@@ -141,7 +144,11 @@ class ScenarioToolClient:
         self, service: str, minutes: int = 30, severity: str | None = None, limit: int = 100
     ) -> dict[str, Any]:
         entries = []
-        for event, count in self.t.get("logs", {}).items():
+        for event, spec in self.t.get("logs", {}).items():
+            # spec: a count of recent lines, or {"count": n, "minutes_ago": m} for older ones
+            count, age = (
+                (spec, 0) if isinstance(spec, int) else (spec["count"], spec["minutes_ago"])
+            )
             message, _, target = event.partition(":")
             level = "warning" if message in {"slow_query_detected", "request_slow"} else "error"
             if severity == "error" and level != "error":
@@ -157,7 +164,9 @@ class ScenarioToolClient:
                     metadata["target"] = target
                 entries.append(
                     {
-                        "timestamp": (self.now - timedelta(seconds=i * 10)).isoformat(),
+                        "timestamp": (
+                            self.now - timedelta(minutes=age, seconds=i * 10)
+                        ).isoformat(),
                         "level": level,
                         "message": message,
                         "metadata": metadata,

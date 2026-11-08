@@ -18,6 +18,7 @@
 | `Makefile` | All build/test/deploy commands |
 | `.env.example` | Environment variable template (no secrets) |
 | `pyproject.toml` | Python tooling config (Ruff, pytest) |
+| `scripts/demo.py` | Repeatable flagship demo through the public API: `prepare`, `run` (stage timings, verifies the diagnosis), `reset` |
 | `.gitignore` | Git ignore rules |
 
 ---
@@ -225,6 +226,8 @@ One package, one image, three services (D-020). Compose picks the service via th
 | `mcp-tools.md` | Per-tool schemas, security boundary, failure modes, tests |
 | `agent.md` | Agent state diagram, nodes, rules, confidence formula, limits |
 
+## `docs/demo.md` — Flagship demo walk-through (UI steps, CLI, measured timings, troubleshooting)
+
 ## `docs/knowledge/` — RAG Knowledge Base
 
 Markdown with YAML front matter (`title`, `doc_type`, `services`, extras kept as metadata).
@@ -256,6 +259,8 @@ Markdown with YAML front matter (`title`, `doc_type`, `services`, extras kept as
 | `apps/api/app/agents/scenarios/cases.json` | 14 scenarios (evaluation, replay, tests) |
 | `evaluation/test_agent_evaluation.py` | `pytest -m evaluation`: runs the scenarios, writes `results/latest.json` |
 | `fixtures/rag_eval.yml` | Labelled retrieval questions (relevant + off-topic) |
+| `tests/demo/test_demo_runner.py` | Demo runner control flow against a fake API (baseline gate, fresh points only, wrong diagnosis fails, reset) |
+| `tests/system/test_demo_scenario.py` | `pytest -m system`: the spec scenario end to end on the live stack |
 
 -----------|---------|
 | `system/` | *(Phase 10)* End-to-end system tests |

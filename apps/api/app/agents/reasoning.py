@@ -111,6 +111,26 @@ RULES: list[CauseRule] = [
         knowledge_terms=("dependency", "502", "depends"),
     ),
     CauseRule(
+        # Diagnosis by elimination: slow requests while the database and every
+        # dependency are measured healthy. Its metric evidence is those exclusions,
+        # not the latency itself, so the symptom never counts as its own cause.
+        cause="application_latency",
+        applies=lambda s: (
+            bool(s & {"latency_step", "symptom_latency"})
+            and "db_latency_flat" in s
+            and "dependencies_healthy" in s
+            and not s
+            & {"db_latency_rise", "db_slow_logs", "dependency_degraded", "internal_errors"}
+        ),
+        statement="{service}'s own request handling became slow "
+        "(its database and dependencies are healthy)",
+        metric_signals=frozenset({"db_latency_flat", "dependencies_healthy"}),
+        log_signals=frozenset({"app_slow_logs"}),
+        contradicted_by=frozenset({"db_latency_rise", "db_slow_logs", "dependency_degraded"}),
+        uses_deployment=False,
+        knowledge_terms=("request_slow", "high latency", "latency"),
+    ),
+    CauseRule(
         cause="application_errors",
         applies=lambda s: "internal_errors" in s,
         statement="{service} itself is failing requests (errors not caused by dependencies)",
@@ -350,6 +370,23 @@ def recommend(
                 requires_human_approval=False,
                 references=refs("database"),
             )
+        ]
+    if best.cause == "application_latency":
+        return [
+            Recommendation(
+                action=f"Profile {service}'s request path and check recent config, feature-flag "
+                "or resource changes",
+                rationale="Requests are slow while the database and dependencies are healthy, "
+                "so the time is spent inside the service itself.",
+                requires_human_approval=False,
+                references=refs("latency", "request_slow"),
+            ),
+            Recommendation(
+                action=f"If users are affected, scale out {service} or shed non-critical load "
+                "while the cause is found",
+                rationale="Buys headroom without changing code; revert once latency recovers.",
+                references=refs("scale", "capacity"),
+            ),
         ]
     if best.cause == "dependency_failure":
         return [

@@ -39,3 +39,15 @@ State each hypothesis with the evidence that supports it and what would
 contradict it. For example: "the 1.8.2 release introduced a slow query" is
 supported by a deploy minutes before the step and by slow-query warnings, and
 contradicted if query latency stayed flat.
+
+## 5. When the database and dependencies are healthy
+
+If request latency stepped up while database query latency stayed flat and
+every downstream dependency is healthy, the time is being spent inside the
+service itself. Typical causes are a configuration or feature-flag change, a
+slow code path, lock contention, garbage-collection pauses or CPU throttling.
+
+- `request_slow` warnings without `slow_query_detected` warnings confirm it.
+- Profile the slow route and compare CPU and memory with the baseline.
+- If users are affected, scale out or shed non-critical load to buy headroom,
+  then revert that once latency recovers.

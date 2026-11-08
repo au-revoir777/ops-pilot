@@ -22,7 +22,7 @@ from __future__ import annotations
 import statistics
 from collections import Counter
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 from app.agents.models import Observation
@@ -32,6 +32,8 @@ LATENCY_STEP_MIN_S = 0.5
 DB_RISE_FACTOR = 3.0
 DB_RISE_MIN_S = 0.3
 LOG_EVENT_MIN = 3
+# Evidence is counted from this long before the symptom onset (1-minute telemetry resolution).
+SYMPTOM_LOOKBACK = timedelta(minutes=3)
 
 
 def parse_ts(value: Any) -> datetime | None:
@@ -203,7 +205,15 @@ def extract_latency_history(facts: Facts, service: str, result: dict[str, Any]) 
         )
 
 
-def extract_db_history(facts: Facts, service: str, result: dict[str, Any]) -> None:
+def extract_db_history(
+    facts: Facts, service: str, result: dict[str, Any], since: datetime | None = None
+) -> None:
+    """``since`` = shortly before the symptom onset, when known.
+
+    An earlier, recovered database incident in the same window must not decide
+    the current one: when the database has been fast since the symptom began,
+    that is reported as flat even if it was slow an hour ago.
+    """
     if facts.note_missing("query_metrics", result):
         return
     points = _series(result)
@@ -225,6 +235,22 @@ def extract_db_history(facts: Facts, service: str, result: dict[str, Any]) -> No
     values = [p["value"] for p in points if p.get("value") is not None]
     if not values:
         return
+    if since is not None:
+        recent = [
+            p["value"]
+            for p in points
+            if p.get("value") is not None and (ts := parse_ts(p["timestamp"])) and ts >= since
+        ]
+        if recent and max(recent) < DB_RISE_MIN_S:
+            facts.add(
+                "metric",
+                f"{service} database query p95 stayed below {_fmt_ms(DB_RISE_MIN_S * 1000)} "
+                f"since the symptom began ({_fmt_time(since)}), now {_fmt_ms(recent[-1] * 1000)}",
+                "query_metrics",
+                signals=["db_latency_flat"],
+                current_s=recent[-1],
+            )
+            return
     if min(values) >= DB_RISE_MIN_S:
         # High for the whole window: no baseline to compare, but clearly slow.
         facts.add(
@@ -261,10 +287,21 @@ def extract_error_history(facts: Facts, service: str, result: dict[str, Any]) ->
         )
 
 
-def extract_logs(facts: Facts, service: str, result: dict[str, Any]) -> None:
+def extract_logs(
+    facts: Facts, service: str, result: dict[str, Any], since: datetime | None = None
+) -> None:
+    """``since`` = shortly before the symptom onset, when known.
+
+    Log lines from an earlier incident in the lookback window describe that
+    incident, not this one, so they are left out of the counts.
+    """
     if facts.note_missing("get_recent_logs", result):
         return
     entries = result.get("entries") or []
+    if since is not None:
+        entries = [
+            e for e in entries if (ts := parse_ts(e.get("timestamp"))) is None or ts >= since
+        ]
     counts = Counter(e.get("message") for e in entries)
     slow_ops = Counter(
         e.get("metadata", {}).get("operation")
@@ -293,9 +330,12 @@ def extract_logs(facts: Facts, service: str, result: dict[str, Any]) -> None:
     if counts["request_slow"] >= LOG_EVENT_MIN:
         facts.add(
             "log",
-            f"{counts['request_slow']} request_slow warnings (requests over 1 s) in {service} logs",
+            f"{counts['request_slow']} request_slow warnings (requests over 1 s) in {service} logs"
+            + ("" if counts["slow_query_detected"] >= LOG_EVENT_MIN else ", with no slow queries"),
             "get_recent_logs",
-            signals=["symptom_latency"],
+            # Slow requests without slow queries point at the service's own code path.
+            signals=["symptom_latency"]
+            + ([] if counts["slow_query_detected"] >= LOG_EVENT_MIN else ["app_slow_logs"]),
             count=counts["request_slow"],
         )
     dep_events = (

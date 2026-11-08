@@ -38,7 +38,7 @@ const SCENARIOS: Scenario[] = [
     mode: "latency",
     does: "Adds a fixed delay (2 s by default) to every checkout request.",
     expect: "checkout p95 and p99 latency rise; error rate stays flat; no database change.",
-    question: "Investigate why checkout latency increased",
+    question: "Why is checkout latency high?",
   },
   {
     id: "checkout-errors",
@@ -170,6 +170,18 @@ export default function IncidentLabPage() {
         }
       />
       <div className="space-y-4">
+        <section aria-labelledby="demo-path" className="rounded-md border border-dashed px-4 py-3 text-sm">
+          <h2 id="demo-path" className="font-semibold">
+            Flagship demo, about 30–60 seconds
+          </h2>
+          <ol className="mt-1 list-decimal space-y-0.5 pl-5 text-muted-foreground">
+            <li>Start from healthy: every service below shows mode none and Healthy.</li>
+            <li>Inject checkout latency, then send traffic.</li>
+            <li>Wait for the p95 chart to rise (usually 15–35 s).</li>
+            <li>Choose Open in Investigation and run it: expect checkout&apos;s own request handling as the cause.</li>
+            <li>Reset to healthy, and give it a minute of traffic before the next run.</li>
+          </ol>
+        </section>
         <Card>
           <CardHeader>
             <div>

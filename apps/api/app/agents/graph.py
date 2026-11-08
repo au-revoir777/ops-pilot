@@ -505,6 +505,7 @@ class InvestigationAgent:
             "error_ratio": self.settings.agent_degraded_error_ratio,
         }
         dependencies: list[str] = []
+        since = self._symptom_since(results)
         for key, result in results.items():
             tool = key.split("(", 1)[0]
             if tool == "get_service_health" and f"service={service}" in key:
@@ -515,11 +516,11 @@ class InvestigationAgent:
             elif tool == "query_metrics" and "http_latency_seconds" in key:
                 ev.extract_latency_history(facts, service, result)
             elif tool == "query_metrics" and "db_query_seconds" in key:
-                ev.extract_db_history(facts, service, result)
+                ev.extract_db_history(facts, service, result, since)
             elif tool == "query_metrics" and "http_errors" in key:
                 ev.extract_error_history(facts, service, result)
             elif tool == "get_recent_logs":
-                ev.extract_logs(facts, service, result)
+                ev.extract_logs(facts, service, result, since)
             elif tool == "get_recent_deployments":
                 ev.extract_deployments(facts, service, result, window_start)
             elif tool == "get_incident_events":
@@ -527,6 +528,25 @@ class InvestigationAgent:
             elif tool == "get_service_dependencies":
                 dependencies = ev.extract_dependencies(facts, service, result)
         return facts.observations, facts.missing, dependencies
+
+    @staticmethod
+    def _symptom_since(results: dict[str, dict[str, Any]]) -> datetime | None:
+        """Shortly before the current latency/error step began, if one is visible."""
+        starts = []
+        for key, result in results.items():
+            down = result.get("status") in {"unavailable", "error"}
+            if down or not key.startswith("query_metrics"):
+                continue
+            points = ev._series(result)
+            if "http_latency_seconds" in key:
+                step = ev.step_change(points, ev.LATENCY_STEP_FACTOR, ev.LATENCY_STEP_MIN_S)
+            elif "http_errors" in key:
+                step = ev.step_change(points, 3.0, 0.02)
+            else:
+                continue
+            if step and step["start"]:
+                starts.append(step["start"])
+        return min(starts) - ev.SYMPTOM_LOOKBACK if starts else None
 
     def _base_missing(self, state: AgentState) -> list[str]:
         return [

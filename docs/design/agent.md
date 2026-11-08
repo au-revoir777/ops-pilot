@@ -88,6 +88,13 @@ A tool that returns `unavailable` produces no facts, only a missing-evidence not
 | `database_degradation` | DB latency rise or slow-query logs | DB latency flat |
 | `dependency_failure` | a degraded dependency or dependency-failure logs | all dependencies healthy |
 | `application_errors` | `request_processing_failed` logs | dependency errors or a degraded dependency |
+| `application_latency` | a latency step while DB latency is flat and all dependencies are healthy (diagnosis by elimination; `request_slow` logs without slow queries support it) | DB latency rise, slow-query logs, a degraded dependency |
+
+**Evidence is judged from the current symptom.** When a latency or error step
+is visible, log counts and the database's state are taken only from 3 minutes
+before its onset onwards. An earlier, recovered incident in the same lookback
+window (its slow-query logs, its database spike) therefore cannot decide the
+current one. Without a visible step the whole window is used, as before.
 
 `deployment_db_regression` subsumes `database_degradation` and
 `deployment_regression`: they are not counted as competing explanations when
@@ -142,14 +149,14 @@ confidence = clamp(raw, 0, 0.95) × (0.6 + 0.4 × coverage)
 - **Predictable cost and latency:** the number of steps and tool calls is capped by design.
 - **Auditable:** every conclusion points at observation and evidence ids, and the trace shows each step.
 - **Safe:** the agent never chooses arbitrary tools or actions. It can only call six read-only tools, and remediation is a recommendation that needs human approval.
-- **Testable:** with simulated tools the graph is deterministic. 14 evaluation scenarios run in CI-like conditions in about a second.
+- **Testable:** with simulated tools the graph is deterministic. 16 evaluation scenarios run in CI-like conditions in about a second.
 
 An open-ended "think, call any tool, repeat" loop would make all four properties
 probabilistic.
 
 ## Evaluation
 
-`apps/api/app/agents/scenarios/cases.json` holds 14 scenarios:
+`apps/api/app/agents/scenarios/cases.json` holds 16 scenarios:
 
 - release + DB regression
 - DB-only slowness
@@ -165,6 +172,8 @@ probabilistic.
 - a timeout cascade
 - the knowledge base down
 - poisoned knowledge
+- the demo: latency inside the service (diagnosis by elimination)
+- the demo after a recovered database incident (stale evidence must not decide)
 
 Run them with `pytest -m evaluation` or `python -m app.agents.evaluation`. Results are written to `tests/evaluation/results/latest.json`.
 

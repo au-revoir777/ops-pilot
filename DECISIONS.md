@@ -520,3 +520,35 @@
   - The health link's accessible name didn't start with its visible text.
   - The MCP client turned a transport timeout during session close into a 500. It is now logged and ignored, since each call has already reported "unavailable".
   - `/api/services` held a database connection during slow MCP calls; the connection is now released first.
+
+---
+
+## D-036: A reliable flagship demo: evidence from the current symptom, a latency-by-elimination rule, a gated demo runner
+
+- **Date:** 2026-11-08 (Phase 9)
+- **What the first live run showed:** the spec's own scenario (inject latency → "Why is checkout latency high?") was diagnosed as "database queries became slow" at 40%.
+  - Slow-query logs from a database test about 30 minutes earlier were still inside the agent's 60-minute log lookback.
+  - No rule covered latency that is neither a release, the database nor a dependency.
+- **Decision 1, judge evidence from the current symptom:** when a latency or error step is visible, logs and database latency are evaluated from 3 minutes before its onset onwards.
+  - 3 minutes covers the 1-minute telemetry resolution.
+  - "DB flat since the symptom began" is now a fact even if the database was slow an hour ago.
+  - Rejected: shortening the lookback for everything. It would lose context for slow-burning incidents that have no clear step.
+- **Decision 2, `application_latency`:** a diagnosis by elimination.
+  - It applies when there is a latency step, database latency is flat and every dependency is healthy, with no database or dependency evidence against it.
+  - Its "metric" evidence is those exclusions, not the latency itself, so the symptom never counts as its own cause and earns no temporal-correlation credit.
+  - That caps it at 0.65 confidence, below cases with direct mechanism evidence (a release plus slow queries reaches 0.95). That is deliberate: elimination is weaker evidence.
+  - `request_slow` warnings without slow queries count as log support. The latency troubleshooting guide gained a section for this case.
+- **Decision 3, a gated demo runner (`scripts/demo.py`, `make demo-prepare` / `make demo`):** it drives the same public API as the UI.
+  - It won't inject unless checkout has been healthy for the last minute (normal p95, no 5xx).
+  - It only counts metric points measured after its own injection, and confirms the failure mode with the service itself.
+  - It verifies the diagnosis and resets afterwards.
+  - The checks came from failures seen while repeating it:
+    - a back-to-back run mistook the previous run's still-recent spike for its own;
+    - baseline traffic stopped before the 1-minute p95 forgot the last incident (prepare now keeps traffic flowing until healthy);
+    - a payments-errors injection made from the UI at the same time was diagnosed instead of the latency.
+- **Measured on the laptop:**
+  - 7 consecutive latency cycles, 6 passed. Injection to diagnosis took 14–36 s, and the investigation itself 0.5–9 s.
+  - The one miss was the concurrent payments injection.
+  - `--mode db` (database degradation, 90%, 35 s) and `--mode errors` (application errors, 90%, 36 s) each passed once.
+  - The Playwright flagship test now follows the spec scenario through the UI and passes in 44 s.
+  - Agent evaluation has 16 of 16 scenarios correct, including two new ones: plain latency, and latency after a recovered database incident.

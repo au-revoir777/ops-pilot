@@ -72,13 +72,14 @@ make up
 # 3. Open the dashboard
 open http://localhost:3001
 
-# 4. Inject a test incident
-make incident
-
-# 5. Investigate
-# Navigate to the Investigation page and ask:
-# "Why is checkout latency high?"
+# 4. Run the flagship demo (inject latency, traffic, ask, diagnose)
+make demo-prepare   # ~3 min: healthy services and a fresh baseline
+make demo           # 30-60 s, or follow the same steps in the Incident Lab
 ```
+
+The demo walk-through, what the audience sees and troubleshooting:
+[docs/demo.md](docs/demo.md). The demo needs `ENABLE_INCIDENT_LAB=true` and
+`ENABLE_FAILURE_INJECTION=true`.
 
 ## Database
 
@@ -238,7 +239,7 @@ It recommends remediation but never performs it.
 ```bash
 cd apps/api
 python -m app.agents.run "Investigate why checkout latency increased" --minutes 30
-python -m app.agents.evaluation        # 14 scenarios, machine-readable metrics
+python -m app.agents.evaluation        # 16 scenarios, machine-readable metrics
 ```
 
 The agent works without any LLM. Set `LLM_PROVIDER` (`openai` or `anthropic`),

@@ -19,9 +19,9 @@ test("inject, traffic, dashboard, investigate, diagnose", async ({ page }) => {
   const lab = await apiJson<{ enabled: boolean }>(page, "/api/lab");
   test.skip(!lab.enabled, "Incident lab is disabled (ENABLE_INCIDENT_LAB=false)");
 
-  // 1. Incident Lab: inject DB slowness, with the confirmation dialog.
+  // 1. Incident Lab: inject checkout latency (the spec scenario), with the confirmation dialog.
   await page.goto("/incident-lab");
-  const card = page.getByRole("region", { name: "Simulate DB slowness" });
+  const card = page.getByRole("region", { name: "Inject checkout latency" });
   await card.getByRole("button", { name: "Inject…" }).click();
   const dialog = page.getByRole("dialog");
   await expect(dialog).toContainText("How to revert");
@@ -42,7 +42,7 @@ test("inject, traffic, dashboard, investigate, diagnose", async ({ page }) => {
   // 4. Investigate from the lab's pre-filled query.
   await page.goto("/incident-lab");
   await page.getByRole("link", { name: "Open in Investigation" }).click();
-  await expect(page.getByLabel("What should OpsPilot investigate?")).toHaveValue(/checkout/i);
+  await expect(page.getByLabel("What should OpsPilot investigate?")).toHaveValue("Why is checkout latency high?");
   await page.getByRole("button", { name: "Investigate", exact: true }).click();
   // On a loaded machine even the 202 can take a while.
   await expect(page).toHaveURL(/\/investigations\/[0-9a-f-]{36}$/, { timeout: 90_000 });
@@ -53,7 +53,7 @@ test("inject, traffic, dashboard, investigate, diagnose", async ({ page }) => {
     await expect(page.getByRole("heading", { level: 3, name: new RegExp(section) })).toBeVisible();
   }
   await expect(page.getByTestId("diagnosis-headline")).toContainText("Most likely root cause:");
-  await expect(page.getByTestId("diagnosis-headline")).toContainText(/database/i);
+  await expect(page.getByTestId("diagnosis-headline")).toContainText("Application latency");
   await expect(page.getByText(/est\. confidence/).first()).toBeVisible();
   await expect(page.getByTestId("confidence-breakdown")).toContainText("not a probability");
   const facts = page.getByRole("region", { name: /Observed facts/ });

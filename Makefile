@@ -2,7 +2,7 @@
 # OpsPilot â€” Makefile
 # =============================================================================
 .PHONY: help setup dev up down build test test-unit test-integration test-system \
-        test-evaluation test-db-up test-db-down test-web test-web-e2e lint lint-web scan ingest ingest-docker rag-eval incident traffic cloud-up cloud-down clean
+        test-evaluation test-db-up test-db-down test-web test-web-e2e demo demo-prepare demo-reset lint lint-web scan ingest ingest-docker rag-eval incident traffic cloud-up cloud-down clean
 
 COMPOSE := docker compose
 PYTHON  := python
@@ -116,6 +116,17 @@ incident: ## Inject a checkout incident: make incident MODE=db|latency|errors|no
 
 traffic: ## Send 50 checkout requests (baseline / incident traffic)
 	$(PYTHON) workloads/scripts/traffic.py --url $(CHECKOUT_URL) --requests 50
+
+API_URL ?= http://127.0.0.1:8000
+
+demo-prepare: ## Flagship demo, step 1: healthy services + fresh baseline (~3 min, before presenting)
+	$(PYTHON) scripts/demo.py prepare --api-url $(API_URL)
+
+demo: ## Flagship demo: inject latency, traffic, ask "Why is checkout latency high?", verify, reset
+	$(PYTHON) scripts/demo.py run --api-url $(API_URL)
+
+demo-reset: ## Reset every demo service to healthy
+	$(PYTHON) scripts/demo.py reset --api-url $(API_URL)
 
 # ---------------------------------------------------------------------------
 # Cloud (AWS)
