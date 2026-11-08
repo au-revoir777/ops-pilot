@@ -1,0 +1,6 @@
+# Demo workloads (reproducible incident test bed). Discovered by the
+# "services" job via file_sd; edits are picked up without a restart.
+- targets: ["checkout:8080", "payments:8081", "users:8082"]
+  labels:
+    project: opsdemo
+    environment: local

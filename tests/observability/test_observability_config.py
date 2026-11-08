@@ -79,10 +79,10 @@ def dashboard_exprs(dashboard: dict) -> list[tuple[str, str]]:
 # ---------------------------------------------------------------------------
 
 
-def test_scrape_targets_exist_in_compose(prometheus, compose):
+def test_static_scrape_targets_exist_in_compose(prometheus, compose):
     services = compose["services"]
     for job in prometheus["scrape_configs"]:
-        for static in job["static_configs"]:
+        for static in job.get("static_configs", []):
             for target in static["targets"]:
                 host = target.split(":")[0]
                 if host == "localhost":
@@ -90,11 +90,36 @@ def test_scrape_targets_exist_in_compose(prometheus, compose):
                 assert host in services, f"{job['job_name']}: no Compose service '{host}'"
 
 
-def test_workload_scrape_ports_match_container_commands(prometheus, compose):
-    workloads = next(j for j in prometheus["scrape_configs"] if j["job_name"] == "workloads")
-    for target in workloads["static_configs"][0]["targets"]:
+def test_monitored_services_come_from_target_files(prometheus, compose):
+    """No service list in prometheus.yml: demo and external targets are files (file_sd)."""
+    services_job = next(j for j in prometheus["scrape_configs"] if j["job_name"] == "services")
+    assert "static_configs" not in services_job
+    assert services_job["file_sd_configs"][0]["files"] == ["/etc/prometheus/targets/*.yml"]
+    mounts = compose["services"]["prometheus"]["volumes"]
+    assert any(
+        m.startswith("./observability/prometheus/targets:/etc/prometheus/targets") for m in mounts
+    )
+
+
+def test_demo_target_file_matches_compose(compose):
+    groups = load_yaml(OBS / "prometheus/targets/demo-workloads.yml")
+    assert groups[0]["labels"]["project"] == "opsdemo"
+    for target in groups[0]["targets"]:
         host, port = target.split(":")
         assert port in compose["services"][host]["command"], target
+
+
+def test_external_project_example_is_valid_but_inactive():
+    example = OBS / "prometheus/targets/external-project.yml.example"
+    groups = load_yaml(example)
+    assert groups[0]["labels"]["project"] not in {"opsdemo", "opspilot"}
+    assert not example.name.endswith(".yml")  # not matched by the *.yml glob
+
+
+def test_recording_rules_keep_project_label(rules):
+    for rule in rules:
+        if "record" in rule and "by (" in rule["expr"]:
+            assert "project" in rule["expr"], rule["record"]
 
 
 def test_rule_files_are_mounted(prometheus, compose):

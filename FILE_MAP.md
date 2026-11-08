@@ -104,6 +104,9 @@ One package, one image, three services (D-020). Compose picks the service via th
 | File | Purpose |
 |------|---------|
 | `prometheus/prometheus.yml` | Scrape config: API, workloads, Loki, Alloy, Prometheus (10 s) |
+| `prometheus/targets/demo-workloads.yml` | File-discovered demo targets (`project=opsdemo`) |
+| `prometheus/targets/external-project.yml.example` | Format for onboarding an external project |
+| `scripts/add_monitored_project.py` | Custom option: connect an external project's /metrics endpoints |
 | `prometheus/rules/opspilot.yml` | RED recording rules (rate, error ratio, p50/p95/p99, DB p95) + alerts |
 | `loki/loki-config.yml` | Loki single-binary config (filesystem storage, schema v13) |
 | `alloy/config.alloy` | Grafana Alloy: Docker log discovery → JSON parsing → Loki (request_id as structured metadata) |
@@ -152,6 +155,7 @@ One package, one image, three services (D-020). Compose picks the service via th
 | Path | Purpose |
 |------|---------|
 | `observability/test_observability_config.py` | Unit: scrape targets vs Compose, rules/dashboards only use emitted metrics, stale dashboard, data-source UIDs, ports |
+| `observability/test_add_monitored_project.py` | Unit: onboarding script output and validation |
 | `system/test_observability_stack.py` | System (`pytest -m system`, needs the stack): targets up, rules loaded, Grafana, cross-service request trace in Loki, latency injection visible |
 | `evaluation/` | *(Phase 10)* Agent evaluation test cases |
 | `fixtures/` | *(Phase 10)* Shared test data |

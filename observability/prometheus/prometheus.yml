@@ -18,10 +18,16 @@ scrape_configs:
   - job_name: opspilot-api
     static_configs:
       - targets: ["api:8000"]
+        labels:
+          project: opspilot
+          environment: local
 
-  - job_name: workloads
-    static_configs:
-      - targets: ["checkout:8080", "payments:8081", "users:8082"]
+  # Every monitored service, demo or external, comes from a target file in
+  # ./targets (see external-project.yml.example). No service names live here.
+  - job_name: services
+    file_sd_configs:
+      - files: ["/etc/prometheus/targets/*.yml"]
+        refresh_interval: 30s
 
   - job_name: loki
     static_configs:

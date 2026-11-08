@@ -5,25 +5,25 @@ groups:
   - name: opspilot-red
     rules:
       - record: service:http_requests:rate1m
-        expr: sum by (service) (rate(http_requests_total[1m]))
+        expr: sum by (project, service) (rate(http_requests_total[1m]))
 
       - record: service:http_errors:ratio_rate1m
         expr: |
-          sum by (service) (rate(http_request_errors_total[1m]))
+          sum by (project, service) (rate(http_request_errors_total[1m]))
             /
-          sum by (service) (rate(http_requests_total[1m]))
+          sum by (project, service) (rate(http_requests_total[1m]))
 
       - record: service:http_latency_seconds:p50_1m
-        expr: histogram_quantile(0.50, sum by (service, le) (rate(http_request_duration_seconds_bucket[1m])))
+        expr: histogram_quantile(0.50, sum by (project, service, le) (rate(http_request_duration_seconds_bucket[1m])))
 
       - record: service:http_latency_seconds:p95_1m
-        expr: histogram_quantile(0.95, sum by (service, le) (rate(http_request_duration_seconds_bucket[1m])))
+        expr: histogram_quantile(0.95, sum by (project, service, le) (rate(http_request_duration_seconds_bucket[1m])))
 
       - record: service:http_latency_seconds:p99_1m
-        expr: histogram_quantile(0.99, sum by (service, le) (rate(http_request_duration_seconds_bucket[1m])))
+        expr: histogram_quantile(0.99, sum by (project, service, le) (rate(http_request_duration_seconds_bucket[1m])))
 
       - record: service_operation:db_query_seconds:p95_1m
-        expr: histogram_quantile(0.95, sum by (service, operation, le) (rate(db_query_duration_seconds_bucket[1m])))
+        expr: histogram_quantile(0.95, sum by (project, service, operation, le) (rate(db_query_duration_seconds_bucket[1m])))
 
   - name: opspilot-alerts
     rules:

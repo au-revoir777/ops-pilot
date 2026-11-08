@@ -58,3 +58,7 @@ alembic/versions/__pycache__/
 # Secrets — never commit
 *.pem
 *.key
+
+# Onboarded external projects (internal hostnames) stay out of git by default.
+observability/prometheus/targets/*.yml
+!observability/prometheus/targets/demo-workloads.yml

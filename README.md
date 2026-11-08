@@ -159,6 +159,20 @@ ENABLE_FAILURE_INJECTION=true docker compose up -d --build   postgres migrate ap
 Trace one request across services in Grafana Explore (Loki):
 `{service=~"checkout|users|payments"} | request_id="<X-Request-ID>"`.
 
+### Monitoring your own project (custom option)
+
+The demo workloads are only a rough evaluation test bed. To monitor another
+deployed project, point OpsPilot at its Prometheus `/metrics` endpoints:
+
+```bash
+python observability/scripts/add_monitored_project.py   --project my-project --target my-api.internal:8000 --environment production
+```
+
+This writes `observability/prometheus/targets/my-project.yml`. Prometheus picks
+it up within 30 s (no restart), and its series carry `project="my-project"`, so
+dashboards and alerts keep it apart from the demo (`project="opsdemo"`).
+Delete the file to stop monitoring. OpsPilot only reads from external targets.
+
 Dashboards are generated: edit `observability/grafana/build_dashboards.py`,
 then run it. Ports are configurable with `GRAFANA_PORT`, `PROMETHEUS_PORT`,
 `LOKI_PORT` and `API_PORT`.

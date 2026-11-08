@@ -272,3 +272,21 @@
   - Agent, RAG, MCP and LLM metrics (`opspilot_tool_calls_total`, `opspilot_rag_retrieval_duration_seconds`, `opspilot_agent_execution_duration_seconds`, `opspilot_llm_errors_total`, `opspilot_llm_tokens_total`) are declared now as a contract. Their dashboard panels exist and stay empty until Phases 4–6 emit them.
   - Every API log line now carries `service` and `version`.
 - **Pinning:** FastAPI is pinned to `>=0.115,<0.116` in the API and workloads. The Docker build had pulled FastAPI 0.162, which puts the un-prefixed route object in `scope["route"]`. That silently changed the route label from `/api/incidents/{incident_id}` to `/incidents/{incident_id}`. `test_metrics_use_full_route_template` guards against this on future upgrades.
+
+---
+
+## D-026: Monitored services come from target files; external projects are a custom, opt-in option
+
+- **Date:** 2026-11-08 (between Phase 3 and Phase 4)
+- **Context:** The master spec's end goal (section 2) is that OpsPilot monitors the owner's separately deployed project. The demo workloads are kept only as a rough evaluation test bed.
+- **Decision:**
+  - `prometheus.yml` no longer lists any service. A `services` job uses `file_sd_configs` over `observability/prometheus/targets/*.yml`, re-read every 30 s.
+  - The demo workloads are one file, `demo-workloads.yml`, labelled `project=opsdemo`.
+  - Connecting an external project is the custom option: `observability/scripts/add_monitored_project.py --project <name> --target host:port` writes `<name>.yml` with `project` and `environment` labels. `external-project.yml.example` documents the format.
+  - Recording rules aggregate `by (project, service)`, so demo and real services never blend.
+  - Onboarded target files are git-ignored by default because they hold internal hostnames. The project names `opspilot` and `opsdemo` are reserved.
+- **Verified:** adding a target file made Prometheus scrape it within about 30 s without a restart, and deleting the file stopped the scraping.
+- **Still to do (spec: by Phase 12/15):**
+  - Log shipping for external projects.
+  - Registering them as workloads in the database.
+  - Authenticated scraping (basic auth/TLS) for targets outside the local network.

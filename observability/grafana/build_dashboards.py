@@ -59,7 +59,7 @@ def build() -> dict[str, Any]:
             "description": "1 = Prometheus can scrape the target's /metrics.",
             "datasource": PROM,
             "gridPos": {"x": 0, "y": 1, "w": 14, "h": 4},
-            "targets": [target('up{job=~"opspilot-api|workloads"}', "{{instance}}")],
+            "targets": [target('up{job=~"opspilot-api|services"}', "{{project}} {{instance}}")],
             "fieldConfig": {
                 "defaults": {
                     "mappings": [

@@ -1,0 +1,13 @@
+# Onboard a separately deployed project by copying this file to
+# `<project>.yml` in this directory. Prometheus re-reads target files every
+# 30 s; no OpsPilot code changes and no restart are needed.
+#
+# Each target must expose Prometheus metrics at /metrics. If it does not use
+# OpsPilot's RED names (http_requests_total, http_request_duration_seconds,
+# http_request_errors_total, app_info), add recording rules that map them.
+#
+# OpsPilot only reads from these targets. Never point failure injection at them.
+- targets: ["my-other-project.internal:9100"]
+  labels:
+    project: my-other-project
+    environment: production
