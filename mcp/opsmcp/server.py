@@ -89,7 +89,11 @@ def build_deps(
         settings=settings,
         prometheus=PrometheusClient(client, settings.prometheus_url),
         loki=LokiClient(client, settings.loki_url),
-        api=OpsPilotApiClient(client, settings.api_url),
+        api=OpsPilotApiClient(
+            client,
+            settings.api_url,
+            {"X-API-Key": settings.api_key.get_secret_value()} if settings.api_key else None,
+        ),
         catalog=CachedCatalog(Path(settings.catalog_path)),
     )
 

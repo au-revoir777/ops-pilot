@@ -18,7 +18,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 import structlog
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
@@ -28,7 +28,6 @@ from app import metrics
 from app.config import get_settings
 from app.db.session import close_db_engine, init_engine
 from app.routes import (
-    chat,
     health,
     incidents,
     investigations,
@@ -38,6 +37,7 @@ from app.routes import (
     system,
     telemetry,
 )
+from app.security import API_KEY_HEADER, redact_secrets, require_api_key
 from app.services.exceptions import OpsPilotError
 
 REQUEST_ID_HEADER = "X-Request-ID"
@@ -69,6 +69,7 @@ def _configure_logging(log_level: str) -> None:
             structlog.processors.StackInfoRenderer(),
             structlog.processors.format_exc_info,
             structlog.processors.UnicodeDecoder(),
+            redact_secrets,
             structlog.processors.JSONRenderer(),
         ],
         wrapper_class=structlog.stdlib.BoundLogger,
@@ -199,10 +200,10 @@ def create_app() -> FastAPI:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.api_cors_origins,
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-        expose_headers=[REQUEST_ID_HEADER],
+        allow_credentials=False,  # no cookies: auth is a header, added server-side
+        allow_methods=["GET", "POST", "PATCH"],
+        allow_headers=["Content-Type", REQUEST_ID_HEADER, API_KEY_HEADER],
+        expose_headers=[REQUEST_ID_HEADER, "X-Total-Count"],
     )
     app.add_middleware(metrics.MetricsMiddleware)
     # Added last so it is the outermost middleware and wraps everything else.
@@ -215,15 +216,30 @@ def create_app() -> FastAPI:
         # Scraped over the internal network only; not routed by the public ALB.
         return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
-    app.include_router(health.router, tags=["Health"])
-    app.include_router(incidents.router, prefix="/api", tags=["Incidents"])
-    app.include_router(investigations.router, prefix="/api", tags=["Investigations"])
-    app.include_router(knowledge.router, prefix="/api", tags=["Knowledge"])
-    app.include_router(system.router, prefix="/api", tags=["System"])
-    app.include_router(lab.router, prefix="/api", tags=["Incident lab"])
-    app.include_router(telemetry.router, prefix="/api", tags=["Telemetry"])
-    app.include_router(replay.router, prefix="/api", tags=["Replay"])
-    app.include_router(chat.router, prefix="/api", tags=["Chat"])
+    app.include_router(health.router, tags=["Health"])  # probes stay open
+    protected = [Depends(require_api_key)]
+    for router, tag in [
+        (incidents.router, "Incidents"),
+        (investigations.router, "Investigations"),
+        (knowledge.router, "Knowledge"),
+        (system.router, "System"),
+        (lab.router, "Incident lab"),
+        (telemetry.router, "Telemetry"),
+        (replay.router, "Replay"),
+    ]:
+        app.include_router(router, prefix="/api", tags=[tag], dependencies=protected)
+    metrics.index_routes(
+        app,
+        [(health.router, ""), (app.router, "")]
+        + [(router, "/api") for router in (
+            incidents.router, investigations.router, knowledge.router, system.router,
+            lab.router, telemetry.router, replay.router,
+        )],
+    )  # fmt: skip
+    if settings.api_key is None:
+        structlog.get_logger("opspilot.startup").warning(
+            "api_auth_disabled", reason="API_KEY not set; /api/* is open"
+        )
 
     return app
 

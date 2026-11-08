@@ -2,7 +2,7 @@
 # OpsPilot â€” Makefile
 # =============================================================================
 .PHONY: help setup dev up down build test test-unit test-integration test-system \
-        test-evaluation test-db-up test-db-down test-web test-web-e2e coverage demo demo-prepare demo-reset lint lint-web scan ingest ingest-docker rag-eval incident traffic cloud-up cloud-down clean
+        test-evaluation test-db-up test-db-down test-web test-web-e2e coverage demo demo-prepare demo-reset lint lint-web scan audit secret-scan ingest ingest-docker rag-eval incident traffic cloud-up cloud-down clean
 
 COMPOSE := docker compose
 PYTHON  := python
@@ -18,7 +18,7 @@ setup: ## Initial project setup
 	@echo "==> Copying .env.example â†’ .env (if missing)"
 	@if not exist .env copy .env.example .env
 	@echo "==> Installing Python dependencies"
-	pip install -r apps/api/requirements.txt -r workloads/requirements.txt -r mcp/requirements.txt
+	pip install -r requirements-dev.txt
 	@echo "==> Setup complete"
 
 # ---------------------------------------------------------------------------
@@ -92,10 +92,20 @@ lint-fix: ## Auto-fix lint issues
 	ruff check --fix .
 	ruff format .
 
-scan: ## Security scan Docker images with Trivy
-	trivy image opspilot-api:latest
-	trivy image opspilot-mcp:latest
-	trivy image opspilot-web:latest
+TRIVY := docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v trivy-cache:/root/.cache aquasec/trivy:0.58.1
+
+scan: ## Scan the local images for HIGH/CRITICAL vulnerabilities (Trivy, via Docker)
+	$(TRIVY) image --severity HIGH,CRITICAL --ignore-unfixed opspilot-api:local
+	$(TRIVY) image --severity HIGH,CRITICAL --ignore-unfixed opspilot-mcp:local
+	$(TRIVY) image --severity HIGH,CRITICAL --ignore-unfixed opspilot-workloads:local
+	$(TRIVY) image --severity HIGH,CRITICAL --ignore-unfixed opspilot-web:local
+
+audit: ## Known-vulnerability check of Python and npm dependencies
+	$(PYTHON) -m pip_audit -r apps/api/requirements.txt -r mcp/requirements.txt -r workloads/requirements.txt
+	cd apps/web && npm audit --omit=dev
+
+secret-scan: ## Fail if a tracked file looks like it contains a secret (run before pushing)
+	$(PYTHON) scripts/secret_scan.py
 
 # ---------------------------------------------------------------------------
 # RAG

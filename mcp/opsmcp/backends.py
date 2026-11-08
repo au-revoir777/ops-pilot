@@ -37,15 +37,20 @@ class BackendQueryError(Exception):
 class _Backend:
     source = "backend"
 
-    def __init__(self, client: httpx.AsyncClient, base_url: str) -> None:
+    def __init__(
+        self, client: httpx.AsyncClient, base_url: str, headers: dict[str, str] | None = None
+    ) -> None:
         self.client = client
         self.base_url = base_url.rstrip("/")
+        self.headers = headers or {}
 
     async def _get(self, path: str, params: dict[str, Any] | None = None) -> Any:
         start = time.perf_counter()
         outcome = "error"
         try:
-            response = await self.client.get(f"{self.base_url}{path}", params=params)
+            response = await self.client.get(
+                f"{self.base_url}{path}", params=params, headers=self.headers
+            )
             if response.status_code >= 500:
                 raise BackendUnavailable(self.source, f"HTTP {response.status_code}")
             if response.status_code >= 400:

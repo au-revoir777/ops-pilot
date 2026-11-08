@@ -300,6 +300,14 @@ An investigation response carries:
 
 Timeouts return 504 `INVESTIGATION_TIMEOUT`, and the run is marked FAILED.
 
+## Security
+
+OpsPilot is read-only toward every monitored system: no endpoint, tool or
+credential can change one. Set `API_KEY` to require `X-API-Key` on `/api/*`
+(mandatory with `APP_ENV=production`); the web UI adds it server-side. The
+threat model, residual risks and scan results are in
+[docs/security.md](docs/security.md). Before pushing: `make secret-scan`.
+
 ## Testing
 
 ```bash

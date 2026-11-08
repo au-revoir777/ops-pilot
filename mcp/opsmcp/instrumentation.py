@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import functools
 import logging
+import re
 import time
 from collections.abc import Awaitable, Callable
 from typing import Any, ParamSpec, TypeVar
@@ -34,6 +35,17 @@ BACKEND_LATENCY = Histogram(
 logger = structlog.get_logger("opsmcp.tools")
 
 
+_SECRET_KEY = re.compile(r"(pass(word)?|secret|token|api[_-]?key|authorization)", re.I)
+
+
+def redact_secret_fields(_logger, _method, event_dict):
+    """Never log the bearer token or any other secret-named field by mistake."""
+    for key in list(event_dict):
+        if _SECRET_KEY.search(key):
+            event_dict[key] = "[REDACTED]"
+    return event_dict
+
+
 def configure_logging(service: str, level: str) -> None:
     def add_service(_logger, _method, event_dict):
         event_dict.setdefault("service", service)
@@ -47,6 +59,7 @@ def configure_logging(service: str, level: str) -> None:
             add_service,
             structlog.processors.TimeStamper(fmt="iso", utc=True),
             structlog.processors.format_exc_info,
+            redact_secret_fields,
             structlog.processors.JSONRenderer(),
         ],
         wrapper_class=structlog.make_filtering_bound_logger(numeric),

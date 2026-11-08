@@ -15,6 +15,7 @@ API and ENABLE_FAILURE_INJECTION=true on the demo workloads.
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 import time
 from collections.abc import Callable
@@ -83,7 +84,10 @@ class DemoResult:
 
 class Demo:
     def __init__(self, api_url: str, ui_url: str, out: Callable[[str], None] = print) -> None:
-        self.http = httpx.Client(base_url=api_url.rstrip("/"), timeout=60.0)
+        # The API may require a key (API_KEY); the demo uses the same one.
+        key = os.environ.get("OPSPILOT_API_KEY") or os.environ.get("API_KEY")
+        headers = {"X-API-Key": key} if key else {}
+        self.http = httpx.Client(base_url=api_url.rstrip("/"), timeout=60.0, headers=headers)
         self.ui_url = ui_url.rstrip("/")
         self.out = out
         self.injected_at = datetime.now(UTC)
@@ -128,11 +132,15 @@ class Demo:
 
     def wait_for(self, what: str, check: Callable[[], bool], timeout: float, every: float = 5.0):
         deadline = time.monotonic() + timeout
+        last_error = ""
         while True:
-            if check():
-                return
+            try:
+                if check():
+                    return
+            except DemoError as exc:  # e.g. metrics briefly unavailable after a restart
+                last_error = f" (last error: {exc})"
             if time.monotonic() > deadline:
-                raise DemoError(f"timed out after {timeout:.0f}s waiting for {what}")
+                raise DemoError(f"timed out after {timeout:.0f}s waiting for {what}{last_error}")
             time.sleep(every)
 
     # -- steps ---------------------------------------------------------------

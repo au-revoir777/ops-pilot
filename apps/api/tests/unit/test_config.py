@@ -66,14 +66,15 @@ class TestDefaults:
 class TestEnvironments:
     @pytest.mark.parametrize("env", ["development", "test", "production"])
     def test_supported_environments(self, env):
-        assert make_settings(app_env=env).app_env == env
+        # Production also requires an API key (see test_security).
+        assert make_settings(app_env=env, api_key="k").app_env == env
 
     def test_unknown_environment_rejected(self):
         with pytest.raises(ValidationError):
             make_settings(app_env="staging-ish")
 
     def test_is_production(self):
-        assert make_settings(app_env="production").is_production is True
+        assert make_settings(app_env="production", api_key="k").is_production is True
         assert make_settings().is_production is False
 
 

@@ -33,7 +33,7 @@ ignore = [
 "**/tests/**" = ["S105", "S106", "S311"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["app", "opsmcp", "opsdemo", "workload_testing", "mcp_fakes", "demo", "run_tests"]
+known-first-party = ["app", "opsmcp", "opsdemo", "workload_testing", "mcp_fakes", "demo", "run_tests", "secret_scan"]
 
 [tool.pytest.ini_options]
 testpaths = ["apps/api/tests", "workloads/tests", "mcp/tests", "tests"]

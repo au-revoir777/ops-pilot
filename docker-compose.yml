@@ -68,6 +68,10 @@ services:
     image: opspilot-api:local
     container_name: opspilot-migrate
     init: true  # reap child processes; clean stop on SIGTERM
+    # Our own images run as non-root; also forbid privilege escalation and drop
+    # every Linux capability (none of them bind low ports or need raw sockets).
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
     command: ["alembic", "upgrade", "head"]
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-opspilot}:${POSTGRES_PASSWORD:-opspilot_dev}@postgres:5432/${POSTGRES_DB:-opspilot}
@@ -85,6 +89,10 @@ services:
     image: opspilot-api:local
     container_name: opspilot-api
     init: true  # reap child processes; clean stop on SIGTERM
+    # Our own images run as non-root; also forbid privilege escalation and drop
+    # every Linux capability (none of them bind low ports or need raw sockets).
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
     env_file:
       - path: .env
         required: false
@@ -99,6 +107,8 @@ services:
       ENABLE_INCIDENT_LAB: ${ENABLE_INCIDENT_LAB:-false}
       FAILURE_ADMIN_TOKEN: ${FAILURE_ADMIN_TOKEN:-}
       PUBLIC_GRAFANA_URL: ${PUBLIC_GRAFANA_URL:-http://localhost:${GRAFANA_PORT:-3000}}
+      # Required on /api/* when set (mandatory with APP_ENV=production).
+      API_KEY: ${API_KEY:-}
     volumes:
       # Knowledge base for RAG; ingest with: docker compose exec api python -m app.rag.ingest
       - ./docs/knowledge:/app/knowledge:ro
@@ -124,10 +134,15 @@ services:
     image: opspilot-mcp:local
     container_name: opspilot-mcp
     init: true  # reap child processes; clean stop on SIGTERM
+    # Our own images run as non-root; also forbid privilege escalation and drop
+    # every Linux capability (none of them bind low ports or need raw sockets).
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
     environment:
       PROMETHEUS_URL: http://prometheus:9090
       LOKI_URL: http://loki:3100
       API_URL: http://api:8000
+      API_KEY: ${API_KEY:-}  # incident events are read from the API
       CATALOG_PATH: /etc/opspilot/services.yml
       MCP_AUTH_TOKEN: ${MCP_AUTH_TOKEN:-}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
@@ -150,6 +165,10 @@ services:
     image: opspilot-workloads:local
     container_name: opspilot-checkout
     init: true  # reap child processes; clean stop on SIGTERM
+    # Our own images run as non-root; also forbid privilege escalation and drop
+    # every Linux capability (none of them bind low ports or need raw sockets).
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
     command: ["uvicorn", "opsdemo.checkout:app", "--host", "0.0.0.0", "--port", "8080", "--no-access-log"]
     environment: &workload-env
       SERVICE_NAME: checkout
@@ -176,6 +195,10 @@ services:
     image: opspilot-workloads:local
     container_name: opspilot-payments
     init: true  # reap child processes; clean stop on SIGTERM
+    # Our own images run as non-root; also forbid privilege escalation and drop
+    # every Linux capability (none of them bind low ports or need raw sockets).
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
     command: ["uvicorn", "opsdemo.payments:app", "--host", "0.0.0.0", "--port", "8081", "--no-access-log"]
     environment:
       <<: *workload-env
@@ -193,6 +216,10 @@ services:
     image: opspilot-workloads:local
     container_name: opspilot-users
     init: true  # reap child processes; clean stop on SIGTERM
+    # Our own images run as non-root; also forbid privilege escalation and drop
+    # every Linux capability (none of them bind low ports or need raw sockets).
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
     command: ["uvicorn", "opsdemo.users:app", "--host", "0.0.0.0", "--port", "8082", "--no-access-log"]
     environment:
       <<: *workload-env
@@ -289,9 +316,15 @@ services:
     image: opspilot-web:local
     container_name: opspilot-web
     init: true
+    # Our own images run as non-root; also forbid privilege escalation and drop
+    # every Linux capability (none of them bind low ports or need raw sockets).
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
     environment:
       # Server-side only: Next.js proxies /api/* here, so the browser never needs the API's address.
       API_INTERNAL_URL: http://api:8000
+      # The proxy adds this as X-API-Key; it is never sent to the browser.
+      OPSPILOT_API_KEY: ${API_KEY:-}
     ports:
       - "127.0.0.1:${WEB_PORT:-3001}:3000"
     depends_on:

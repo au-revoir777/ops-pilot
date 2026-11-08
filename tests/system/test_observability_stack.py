@@ -22,6 +22,9 @@ import pytest
 
 pytestmark = pytest.mark.system
 
+_KEY = os.environ.get("OPSPILOT_API_KEY") or os.environ.get("API_KEY")
+API_HEADERS = {"X-API-Key": _KEY} if _KEY else {}
+
 PROMETHEUS = os.environ.get("PROMETHEUS_URL", "http://127.0.0.1:9090")
 LOKI = os.environ.get("LOKI_URL", "http://127.0.0.1:3100")
 GRAFANA = os.environ.get("GRAFANA_URL", "http://127.0.0.1:3000")
@@ -40,7 +43,7 @@ SLOW_REQUEST_LOGS = (
 
 @pytest.fixture(scope="module")
 def http() -> Iterator[httpx.Client]:
-    with httpx.Client(timeout=30) as client:
+    with httpx.Client(timeout=30, headers=API_HEADERS) as client:
         yield client
 
 

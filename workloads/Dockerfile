@@ -10,6 +10,11 @@ RUN groupadd -r workload && useradd -r -g workload -d /app -s /sbin/nologin work
 WORKDIR /app
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 
+# Security updates for the base OS, and current packaging tools (the base image's
+# bundled wheel/setuptools carry advisories; Phase 11 Trivy scan, D-038).
+RUN apt-get update && apt-get upgrade -y && rm -rf /var/lib/apt/lists/* && \
+    pip install --no-cache-dir --upgrade pip setuptools wheel
+
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 

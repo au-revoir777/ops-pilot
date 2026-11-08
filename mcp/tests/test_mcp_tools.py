@@ -453,3 +453,13 @@ def test_shipped_catalog_is_valid():
     catalog = ServiceCatalog.load(path)
     assert catalog.get("checkout").depends_on == ("users", "payments")
     assert catalog.dependents_of("payments") == ["checkout"]
+
+
+def test_api_key_is_sent_to_the_opspilot_api():
+    """With API_KEY enforced, incident events still come through."""
+    from opsmcp.config import McpSettings
+    from opsmcp.server import build_deps
+
+    with_key = build_deps(McpSettings(_env_file=None, api_key="k-123"))
+    assert with_key.api.headers == {"X-API-Key": "k-123"}
+    assert build_deps(McpSettings(_env_file=None)).api.headers == {}

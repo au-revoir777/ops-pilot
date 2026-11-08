@@ -577,3 +577,41 @@
   - Branch coverage of unit + integration is 88.4% (lines 89.9%, branches 79.5%).
   - Frontend coverage is not measured.
 - **Details:** `docs/testing.md`.
+
+---
+
+## D-038: Security hardening: an enforced API key, closed CORS, dropped capabilities, upgraded Starlette
+
+- **Date:** 2026-11-08 (Phase 11)
+- **Audit findings (all fixed):**
+  - `API_KEY` was declared but never checked.
+  - CORS allowed credentials and every method and header, although nothing uses cookies.
+  - An unimplemented `/api/chat` skeleton was exposed.
+  - Logs had no redaction.
+  - Nothing capped concurrent agent runs.
+  - Containers kept their default Linux capabilities.
+- **API key:** when set, it is required as `X-API-Key` on every `/api/*` route; `/health`, `/ready` and `/metrics` stay open for probes.
+  - Production refuses to start without it.
+  - The web proxy adds it server-side (`OPSPILOT_API_KEY`, no `NEXT_PUBLIC_`) and drops any key a browser sends.
+  - Rejected: open by default in every environment. That would leave the cloud deployment to remember to enable it.
+- **CORS:** no origins by default, no credentials, only GET/POST/PATCH and the three headers the API uses. The UI is same-origin through its proxy.
+- **Concurrency:** at most `MAX_CONCURRENT_INVESTIGATIONS` (4) agent runs and replays at once per process. Further requests get 429 instead of queueing.
+- **Redaction:** a structlog processor masks secret-named fields and credentials inside strings (API), and secret-named fields (MCP).
+- **Containers:** `cap_drop: [ALL]` and `no-new-privileges` on all seven OpsPilot services. All four images were already non-root with health checks.
+- **Dependencies:**
+  - Starlette 0.46.2 carried 7 advisories. FastAPI moved to 0.162 and Starlette to 1.10.
+  - FastAPI 0.162 nests included routers, which is what broke route labels in D-025. The metrics middleware now builds its own route index from our routers at startup (`metrics.index_routes`) instead of reading FastAPI internals, so labels no longer depend on the framework version. The existing regression test passes.
+  - Next's bundled PostCSS was pinned to 8.5.32 with an npm override.
+  - Pillow stays at 11.3.0 because fastembed requires < 12. The finding is accepted and documented: OpsPilot never decodes images.
+- **Smaller attack surface in the images:**
+  - `langchain`, `langchain-openai` and `langchain-community` were installed but never imported, so they were removed. The optional LLM is called over HTTP directly.
+  - LangGraph moved to 1.2, which brings langchain-core 1.x and fixes the Trivy findings for langchain-core and langgraph-sdk.
+  - Unused OpenTelemetry, python-json-logger and python-dotenv were removed.
+  - Test and lint tools moved to `requirements-dev.txt`, out of the runtime image.
+  - The API image no longer installs gcc or libpq, since every dependency ships wheels.
+  - All Python images apply OS security updates and upgrade pip, setuptools and wheel; the web image runs `apk upgrade`.
+- **Upgrades stay out of the global Python.** They were made only in the project `.venv` and the images; the global interpreter keeps Starlette 0.38.6 and Pydantic 2.9.2 for the user's other project.
+- **Guards:**
+  - 18 static security tests: no shell or eval; non-root images; localhost ports; database network isolation; dropped capabilities; secrets as `SecretStr`; read-only tool allow-list; clean secret scan.
+  - Behavioural tests: every `/api` route and method rejects a missing key.
+- **Details:** `docs/security.md` (threat model with residual risks).

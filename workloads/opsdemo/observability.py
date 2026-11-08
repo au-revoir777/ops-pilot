@@ -14,6 +14,7 @@ import uuid
 
 import structlog
 from prometheus_client import CollectorRegistry, Counter, Gauge, Histogram
+from starlette.routing import Match
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 REQUEST_ID_HEADER = "X-Request-ID"
@@ -108,6 +109,25 @@ def current_request_id() -> str | None:
     return structlog.contextvars.get_contextvars().get("request_id")
 
 
+def route_template(scope: Scope) -> str:
+    """The matched route's full template (``/api/incidents/{incident_id}``).
+
+    Resolved against the application's own route table rather than
+    ``scope["route"]``: newer Starlette/FastAPI versions put the un-prefixed
+    route object there, which would silently change the label.
+    """
+    app = scope.get("app")
+    routes = getattr(getattr(app, "router", None), "routes", None) or []
+    partial = None
+    for route in routes:
+        match, _ = route.matches(scope)
+        if match is Match.FULL:
+            return getattr(route, "path", "unmatched")
+        if match is Match.PARTIAL and partial is None:  # e.g. wrong method -> 405
+            partial = getattr(route, "path", None)
+    return partial or "unmatched"
+
+
 class RequestContextMiddleware:
     """Request IDs, access logs and RED metrics for every HTTP request."""
 
@@ -152,8 +172,7 @@ class RequestContextMiddleware:
                 self._record(scope, status_code, elapsed)
 
     def _record(self, scope: Scope, status_code: int, elapsed: float) -> None:
-        route_obj = scope.get("route")
-        route = getattr(route_obj, "path", None) or "unmatched"
+        route = route_template(scope)
         method = scope["method"]
         service = self.metrics.service
 

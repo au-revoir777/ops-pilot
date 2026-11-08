@@ -82,10 +82,14 @@ class Settings(BaseSettings):
     # --- API ---
     api_host: str = Field(default="0.0.0.0", description="API bind host")
     api_port: int = Field(default=8000, description="API bind port")
-    api_cors_origins: list[str] = Field(
-        default=["http://localhost:3001"], description="Allowed CORS origins"
+    # The web UI calls the API through its own server (same origin), so no
+    # browser origin needs CORS by default. Add origins only for other clients.
+    api_cors_origins: list[str] = Field(default=[], description="Allowed CORS origins")
+    api_key: SecretStr | None = Field(
+        default=None,
+        description="Required in X-API-Key on /api/* when set; mandatory in production",
     )
-    api_key: str = Field(default="", description="API authentication key")
+    max_concurrent_investigations: int = Field(default=4, ge=1, le=64)
 
     # --- Agent ---
     agent_max_steps: int = Field(default=15, ge=5, le=50, description="LangGraph recursion limit")
@@ -132,6 +136,12 @@ class Settings(BaseSettings):
         """Refuse to run the test environment against a non-test database."""
         if self.app_env == "test" and self.database_url is not None:
             assert_test_database_url(self.database_url.get_secret_value())
+        return self
+
+    @model_validator(mode="after")
+    def _require_auth_in_production(self) -> Settings:
+        if self.app_env == "production" and self.api_key is None:
+            raise ValueError("API_KEY must be set when APP_ENV=production")
         return self
 
     @model_validator(mode="after")

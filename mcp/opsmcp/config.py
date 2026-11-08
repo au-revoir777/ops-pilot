@@ -23,6 +23,8 @@ class McpSettings(BaseSettings):
 
     # When set, every MCP request must carry "Authorization: Bearer <token>".
     mcp_auth_token: SecretStr | None = Field(default=None)
+    # The OpsPilot API's key (API_KEY), sent as X-API-Key when it is enforced.
+    api_key: SecretStr | None = Field(default=None)
 
     # Health classification thresholds.
     degraded_error_ratio: float = Field(default=0.05, ge=0, le=1)

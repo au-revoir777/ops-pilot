@@ -19,6 +19,7 @@
 | `.env.example` | Environment variable template (no secrets) |
 | `pyproject.toml` | Python tooling config (Ruff, pytest) |
 | `conftest.py` | Repository-wide rule: every test carries exactly one tier marker (unit, integration, system, evaluation) |
+| `scripts/secret_scan.py` | Fails on committed secrets (keys, tokens, credentials in URLs) across tracked files; `make secret-scan` |
 | `scripts/run_tests.py` | Runs one tier of the pyramid, Python and frontend; what the `make test*` targets call |
 | `scripts/demo.py` | Repeatable flagship demo through the public API: `prepare`, `run` (stage timings, verifies the diagnosis), `reset` |
 | `.gitignore` | Git ignore rules |
@@ -44,7 +45,7 @@
 | `app/services/investigation_runner.py` | Runs the agent for an investigation, persists evidence/result, handles timeouts |
 | `app/db/migrations/versions/0003_investigation_results.py` | Investigation query/result columns |
 | `app/routes/investigations.py` | `POST /api/investigations`, `GET /api/investigations` (filters, sort, `X-Total-Count`), `GET /api/investigations/{id}`, `GET /api/incidents/{id}/investigations` |
-| `app/routes/chat.py` | Agent chat endpoint *(skeleton)* |
+| `app/security.py` | API key dependency, investigation concurrency cap (429), structlog secret redaction |
 | `app/metrics.py` | Prometheus metrics: RED middleware, domain metrics, agent metric contract |
 | `app/db/base.py` | Declarative base, naming convention, UUID/timestamp mixins, `pg_enum` helper |
 | `app/db/session.py` | Engine/session factory lifecycle, `get_db_session`, slow-query logging |
@@ -92,6 +93,7 @@
 | `tests/unit/test_agent.py` | Graph transitions, bounds, planner, evidence, confidence, LLM stub |
 | `tests/unit/test_investigation_runner.py` | Runner success/timeout/failure, report → events, route validation |
 | `tests/integration/test_prompt_injection_e2e.py` | A hostile runbook through ingest, pgvector, the real retriever, agent, API and storage: flagged, inert, never cited |
+| `tests/unit/test_security.py` | API key on every route and method, CORS closed, 429 cap, log redaction, production requires a key |
 | `tests/unit/test_adapters.py` | LLM provider request shapes and key-safe failures, MCP client allow-list and failure paths, report rendering |
 | `tests/integration/test_investigation_api.py` | API → database → agent: sync/background runs, failures, history filters, services, health |
 | `tests/unit/test_lab.py` | Lab allow-list, disabled switch, admin-token forwarding, unreachable targets |
@@ -230,6 +232,8 @@ One package, one image, three services (D-020). Compose picks the service via th
 | `mcp-tools.md` | Per-tool schemas, security boundary, failure modes, tests |
 | `agent.md` | Agent state diagram, nodes, rules, confidence formula, limits |
 
+## `docs/security.md` — Threat model (threat, surface, risk, mitigation, residual risk), controls implemented vs planned, scan results
+
 ## `docs/testing.md` — Testing strategy: tiers, counts, what each proves, prompt-injection coverage, fixtures, coverage
 
 ## `docs/demo.md` — Flagship demo walk-through (UI steps, CLI, measured timings, troubleshooting)
@@ -265,6 +269,7 @@ Markdown with YAML front matter (`title`, `doc_type`, `services`, extras kept as
 | `apps/api/app/agents/scenarios/cases.json` | 14 scenarios (evaluation, replay, tests) |
 | `evaluation/test_agent_evaluation.py` | `pytest -m evaluation`: runs the scenarios, writes `results/latest.json` |
 | `fixtures/rag_eval.yml` | Labelled retrieval questions (relevant + off-topic) |
+| `tests/security/test_static_security.py` | Security properties from the source tree: no shell/eval, non-root images, localhost ports, DB isolation, dropped capabilities, SecretStr, read-only tools, secret scan |
 | `tests/scripts/test_demo_runner.py` | Demo runner control flow against a fake API (baseline gate, fresh points only, wrong diagnosis fails, reset) |
 | `tests/scripts/test_run_tests.py` | The test runner builds the right commands for each tier |
 | `tests/system/test_demo_scenario.py` | `pytest -m system`: the spec scenario end to end on the live stack |

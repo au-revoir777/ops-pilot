@@ -18,6 +18,7 @@ from pydantic import BaseModel
 from app.agents.graph import InvestigationAgent
 from app.agents.simulation import NOW, ScenarioRetriever, ScenarioToolClient, load_cases
 from app.config import Settings
+from app.security import InvestigationSlotDep
 from app.services.exceptions import NotFoundError
 
 router = APIRouter()
@@ -55,7 +56,7 @@ async def list_replays() -> list[ReplayCase]:
 
 
 @router.post("/replays/{case_id}", response_model=ReplayResult)
-async def run_replay(case_id: str) -> ReplayResult:
+async def run_replay(case_id: str, _slot: InvestigationSlotDep) -> ReplayResult:
     data = load_cases()
     raw = next((c for c in data["cases"] if c["id"] == case_id), None)
     if raw is None:

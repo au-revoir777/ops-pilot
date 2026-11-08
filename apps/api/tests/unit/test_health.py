@@ -125,6 +125,7 @@ async def test_invalid_payload_is_422(app: FastAPI, client: AsyncClient):
     assert response.status_code == 422
 
 
-async def test_chat_skeleton_returns_200(client: AsyncClient):
+async def test_removed_chat_skeleton_is_gone(client: AsyncClient):
+    # The unimplemented endpoint was removed (attack surface, Phase 11).
     response = await client.post("/api/chat")
-    assert response.status_code == 200
+    assert response.status_code == 404

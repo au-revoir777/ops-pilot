@@ -24,6 +24,9 @@ from mcp.client.streamable_http import streamable_http_client
 
 pytestmark = pytest.mark.system
 
+_KEY = os.environ.get("OPSPILOT_API_KEY") or os.environ.get("API_KEY")
+API_HEADERS = {"X-API-Key": _KEY} if _KEY else {}
+
 MCP_URL = os.environ.get("MCP_URL", "http://127.0.0.1:8001")
 CHECKOUT = os.environ.get("CHECKOUT_URL", "http://127.0.0.1:8080")
 PROMETHEUS = os.environ.get("PROMETHEUS_URL", "http://127.0.0.1:9090")
@@ -50,7 +53,7 @@ async def call(session: ClientSession, tool: str, **arguments: Any) -> dict[str,
 
 def send_checkouts(count: int) -> None:
     """Generate traffic. A loaded laptop can time out the odd request; most must succeed."""
-    with httpx.Client(timeout=30) as client:
+    with httpx.Client(timeout=30, headers=API_HEADERS) as client:
         ok = sum(
             client.post(f"{CHECKOUT}/checkout", json=CART).status_code == 201 for _ in range(count)
         )

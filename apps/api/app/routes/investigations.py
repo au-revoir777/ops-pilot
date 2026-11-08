@@ -19,6 +19,7 @@ from app.dependencies import (
     InvestigationServiceDep,
     SessionDep,
 )
+from app.security import InvestigationSlotDep
 from app.services.investigation_runner import InvestigationRunner, run_in_background
 
 router = APIRouter()
@@ -98,6 +99,7 @@ class InvestigationDetail(InvestigationSummary):
     responses={202: {"description": "Accepted; the agent runs in the background"}},
 )
 async def create_investigation(
+    _slot: InvestigationSlotDep,
     data: InvestigationCreate,
     session: SessionDep,
     agent_factory: AgentFactoryDep,

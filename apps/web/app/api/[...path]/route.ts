@@ -11,6 +11,11 @@ const FORWARD_RESPONSE = ["content-type", "x-request-id", "x-total-count"];
 // Investigations with wait=true run the whole agent before answering.
 const TIMEOUT_MS = 190_000;
 
+// Server-side only (no NEXT_PUBLIC_ prefix): the browser never sees the key.
+function apiKey(): string | undefined {
+  return process.env.OPSPILOT_API_KEY || undefined;
+}
+
 function apiBase(): string {
   return (process.env.API_INTERNAL_URL ?? "http://127.0.0.1:8000").replace(/\/$/, "");
 }
@@ -24,6 +29,9 @@ async function proxy(request: NextRequest, { params }: { params: Promise<{ path:
     const value = request.headers.get(name);
     if (value) headers.set(name, value);
   }
+  // Any X-API-Key a browser sends is dropped above; only the server's own key is used.
+  const key = apiKey();
+  if (key) headers.set("x-api-key", key);
   try {
     const upstream = await fetch(target, {
       method: request.method,

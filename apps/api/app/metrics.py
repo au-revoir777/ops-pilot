@@ -8,9 +8,12 @@ alerts exist before Phases 5-6 start emitting them.
 
 from __future__ import annotations
 
+import re
 import time
+from typing import Any
 
 from prometheus_client import Counter, Gauge, Histogram
+from starlette.routing import compile_path
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 SERVICE = "opspilot-api"
@@ -86,6 +89,42 @@ def set_build_info(version: str) -> None:
     APP_INFO.labels(service=SERVICE, version=version).set(1)
 
 
+RouteIndex = list[tuple["re.Pattern[str]", str, frozenset[str]]]
+
+
+def index_routes(app: Any, routers: list[tuple[Any, str]]) -> None:
+    """Record every route's full template (prefix included) on the app.
+
+    Built from our own routers at startup instead of read back from
+    ``scope["route"]`` or FastAPI's internal route tree: both changed between
+    FastAPI versions (0.162 nests included routers and puts the un-prefixed
+    route in the scope), which silently changed the labels.
+    """
+    index: RouteIndex = []
+    for router, prefix in routers:
+        for route in router.routes:
+            path = getattr(route, "path", None)
+            if path is None:
+                continue
+            regex, template, _ = compile_path(prefix + path)
+            index.append((regex, template, frozenset(getattr(route, "methods", None) or ())))
+    app.state.route_index = index
+
+
+def route_template(scope: Scope) -> str:
+    """The matched route's full template (``/api/incidents/{incident_id}``)."""
+    app = scope.get("app")
+    index: RouteIndex = getattr(getattr(app, "state", None), "route_index", None) or []
+    path, method = scope["path"], scope.get("method", "")
+    partial = None
+    for regex, template, methods in index:
+        if regex.match(path):
+            if not methods or method in methods:
+                return template
+            partial = partial or template  # right path, wrong method (405)
+    return partial or "unmatched"
+
+
 class MetricsMiddleware:
     """RED metrics per route template. Probes and /metrics are not counted."""
 
@@ -112,7 +151,7 @@ class MetricsMiddleware:
         finally:
             elapsed = time.perf_counter() - start
             HTTP_IN_PROGRESS.labels(service=SERVICE).dec()
-            route = getattr(scope.get("route"), "path", None) or "unmatched"
+            route = route_template(scope)
             method = scope["method"]
             HTTP_REQUESTS.labels(
                 service=SERVICE, method=method, route=route, status=str(status_code)
