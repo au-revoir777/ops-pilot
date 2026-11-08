@@ -1,0 +1,54 @@
+{
+  "case": {
+    "id": "unknown-service",
+    "question": "Why is the mobile app broken?",
+    "expected_service": null,
+    "expected_root_cause": null,
+    "unavailable_sources": []
+  },
+  "match": true,
+  "service_match": true,
+  "report": {
+    "query": "Why is the mobile app broken?",
+    "service": null,
+    "symptoms": [],
+    "window_minutes": 60,
+    "observations": [],
+    "evidence": [],
+    "hypotheses": [],
+    "conclusion": "Could not identify the service to investigate; please name it.",
+    "root_cause": null,
+    "confidence": 0.0,
+    "confidence_breakdown": null,
+    "recommendations": [
+      {
+        "action": "Continue manual investigation of the service: evidence was insufficient",
+        "rationale": "No hypothesis reached the confidence threshold.",
+        "requires_human_approval": false,
+        "references": []
+      }
+    ],
+    "missing_evidence": [
+      "could not identify which service the question is about"
+    ],
+    "tool_calls": [],
+    "trace": [
+      {
+        "node": "planner",
+        "duration_ms": 0.2,
+        "summary": "no service identified"
+      },
+      {
+        "node": "synthesizer",
+        "duration_ms": 0.1,
+        "summary": "Could not identify the service to investigate; please name it."
+      }
+    ],
+    "iterations": 0,
+    "llm": {
+      "provider": "none",
+      "status": "not_used"
+    },
+    "completed": true
+  }
+}

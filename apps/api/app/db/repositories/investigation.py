@@ -4,12 +4,41 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Sequence
+from dataclasses import dataclass
+from datetime import datetime
+from typing import Literal
 
-from sqlalchemy import func, select
+from sqlalchemy import Select, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.db.models.incident import Incident, IncidentSeverity
 from app.db.models.investigation import Investigation, InvestigationEvent, InvestigationStatus
+
+SortField = Literal["created_at", "latency_ms", "confidence"]
+SORT_COLUMNS = {
+    "created_at": Investigation.created_at,
+    "latency_ms": Investigation.latency_ms,
+    "confidence": Investigation.confidence,
+}
+
+
+def escape_like(text: str) -> str:
+    return text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+@dataclass(frozen=True)
+class InvestigationFilters:
+    """History filters. All optional; combined with AND."""
+
+    status: InvestigationStatus | None = None
+    service: str | None = None
+    severity: IncidentSeverity | None = None
+    text: str | None = None
+    since: datetime | None = None
+    until: datetime | None = None
+    sort: SortField = "created_at"
+    ascending: bool = False
 
 
 class InvestigationRepository:
@@ -39,15 +68,47 @@ class InvestigationRepository:
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
-    async def list_recent(
-        self, *, limit: int = 50, offset: int = 0, status: InvestigationStatus | None = None
-    ) -> Sequence[Investigation]:
+    def _filtered(self, filters: InvestigationFilters) -> Select[tuple[Investigation]]:
         stmt = select(Investigation)
-        if status is not None:
-            stmt = stmt.where(Investigation.status == status)
-        stmt = stmt.order_by(Investigation.created_at.desc(), Investigation.id.desc())
+        if filters.status is not None:
+            stmt = stmt.where(Investigation.status == filters.status)
+        if filters.service is not None:
+            stmt = stmt.where(Investigation.service == filters.service)
+        if filters.severity is not None:
+            stmt = stmt.join(Investigation.incident).where(Incident.severity == filters.severity)
+        if filters.since is not None:
+            stmt = stmt.where(Investigation.created_at >= filters.since)
+        if filters.until is not None:
+            stmt = stmt.where(Investigation.created_at <= filters.until)
+        if filters.text:
+            pattern = f"%{escape_like(filters.text)}%"
+            stmt = stmt.where(
+                or_(
+                    Investigation.query.ilike(pattern, escape="\\"),
+                    Investigation.diagnosis.ilike(pattern, escape="\\"),
+                    Investigation.root_cause.ilike(pattern, escape="\\"),
+                )
+            )
+        return stmt
+
+    async def list_recent(
+        self, *, limit: int = 50, offset: int = 0, filters: InvestigationFilters | None = None
+    ) -> Sequence[Investigation]:
+        filters = filters or InvestigationFilters()
+        column = SORT_COLUMNS[filters.sort]
+        order = column.asc().nulls_last() if filters.ascending else column.desc().nulls_last()
+        stmt = (
+            self._filtered(filters)
+            .options(selectinload(Investigation.incident))
+            .order_by(order, Investigation.id.desc())
+        )
         result = await self.session.execute(stmt.limit(limit).offset(offset))
         return result.scalars().all()
+
+    async def count(self, filters: InvestigationFilters | None = None) -> int:
+        filtered = self._filtered(filters or InvestigationFilters()).subquery()
+        stmt = select(func.count()).select_from(filtered)
+        return int((await self.session.execute(stmt)).scalar_one())
 
     async def list_for_incident(self, incident_id: uuid.UUID) -> Sequence[Investigation]:
         stmt = (

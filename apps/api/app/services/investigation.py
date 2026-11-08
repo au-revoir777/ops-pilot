@@ -18,7 +18,7 @@ from app.db.models.investigation import (
     InvestigationStatus,
 )
 from app.db.repositories.incident import IncidentRepository
-from app.db.repositories.investigation import InvestigationRepository
+from app.db.repositories.investigation import InvestigationFilters, InvestigationRepository
 from app.metrics import (
     INCIDENT_STATUS_CHANGES,
     INVESTIGATION_DURATION,
@@ -87,9 +87,11 @@ class InvestigationService:
         return investigation
 
     async def list_investigations(
-        self, *, limit: int = 50, offset: int = 0, status: InvestigationStatus | None = None
-    ) -> Sequence[Investigation]:
-        return await self.investigations.list_recent(limit=limit, offset=offset, status=status)
+        self, *, limit: int = 50, offset: int = 0, filters: InvestigationFilters | None = None
+    ) -> tuple[Sequence[Investigation], int]:
+        """A page of investigations and the total matching the filters."""
+        items = await self.investigations.list_recent(limit=limit, offset=offset, filters=filters)
+        return items, await self.investigations.count(filters)
 
     async def list_for_incident(self, incident_id: uuid.UUID) -> Sequence[Investigation]:
         if await self.incidents.get(incident_id) is None:
@@ -130,7 +132,12 @@ class InvestigationService:
                     sequence=1,
                     event_type=InvestigationEventType.STATUS_CHANGE,
                     message="Investigation created",
-                    details={"to": InvestigationStatus.PENDING.value},
+                    # The creating request's correlation ID, so the UI can link
+                    # this investigation to the API logs.
+                    details={
+                        "to": InvestigationStatus.PENDING.value,
+                        "request_id": structlog.contextvars.get_contextvars().get("request_id"),
+                    },
                 )
             )
         # Metrics only after a successful commit, so rolled-back work is never counted.

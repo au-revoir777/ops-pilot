@@ -106,5 +106,11 @@ async def connect_mcp(
     try:
         yield client
     finally:
-        await stack.aclose()
+        try:
+            await stack.aclose()
+        except Exception as exc:
+            # The SDK's background reader re-raises transport errors (e.g. a read
+            # timeout) when the session closes. Each call already reported them
+            # as 'unavailable'; don't turn a finished request into a 500.
+            logger.warning("mcp_close_failed", error_type=type(exc).__name__)
         await http.aclose()

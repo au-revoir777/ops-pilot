@@ -34,10 +34,13 @@
 | `app/dependencies.py` | DI providers: request-scoped session, services |
 | `app/routes/health.py` | `/health` (liveness) and `/ready` (DB `SELECT 1`, 503 on failure) |
 | `app/routes/incidents.py` | `POST/GET /api/incidents`, `GET /api/incidents/{id}`, `PATCH .../status` |
-| `app/routes/system.py` | `GET /api/services`, `GET /api/health` (dependency status) |
+| `app/routes/system.py` | `GET /api/services` (`?health=true` adds health, latency, errors, dependencies), `GET /api/health`, `GET /api/config` (safe public config) |
+| `app/routes/telemetry.py` | `GET /api/metrics` (allow-listed recording rules via MCP), `GET /api/services/{service}/deployments` |
+| `app/routes/lab.py` | Incident lab proxy to the demo workloads only: `GET /api/lab`, `POST /api/lab/failure`, `POST /api/lab/traffic` |
+| `app/routes/replay.py` | `GET /api/replays`, `POST /api/replays/{id}`: the real agent over recorded scenarios (offline, nothing stored) |
 | `app/services/investigation_runner.py` | Runs the agent for an investigation, persists evidence/result, handles timeouts |
 | `app/db/migrations/versions/0003_investigation_results.py` | Investigation query/result columns |
-| `app/routes/investigations.py` | `POST /api/investigations`, `GET /api/investigations/{id}`, `GET /api/incidents/{id}/investigations` |
+| `app/routes/investigations.py` | `POST /api/investigations`, `GET /api/investigations` (filters, sort, `X-Total-Count`), `GET /api/investigations/{id}`, `GET /api/incidents/{id}/investigations` |
 | `app/routes/chat.py` | Agent chat endpoint *(skeleton)* |
 | `app/metrics.py` | Prometheus metrics: RED middleware, domain metrics, agent metric contract |
 | `app/db/base.py` | Declarative base, naming convention, UUID/timestamp mixins, `pg_enum` helper |
@@ -85,12 +88,44 @@
 | `tests/integration/test_rag_quality.py` | `pytest -m evaluation`: retrieval quality with the real model |
 | `tests/unit/test_agent.py` | Graph transitions, bounds, planner, evidence, confidence, LLM stub |
 | `tests/unit/test_investigation_runner.py` | Runner success/timeout/failure, report → events, route validation |
-| `tests/integration/test_investigation_api.py` | API → database → agent: sync/background runs, failures, services, health |
+| `tests/integration/test_investigation_api.py` | API → database → agent: sync/background runs, failures, history filters, services, health |
+| `tests/unit/test_lab.py` | Lab allow-list, disabled switch, admin-token forwarding, unreachable targets |
+| `tests/unit/test_ui_endpoints.py` | Config, metrics, deployments and replay endpoints |
 | `tests/unit/test_services.py` | State machines, transaction commit/rollback with mocked repositories |
 | `tests/integration/conftest.py` | Real Postgres fixtures: Alembic to head, savepoint-rollback isolation |
 | `tests/integration/test_migrations.py` | Upgrade from empty, downgrade/re-upgrade, models == migrations |
 | `tests/integration/test_persistence.py` | Repositories, constraints, FKs, cascades, pgvector, N+1, rollback |
 | `tests/integration/test_api.py` | HTTP API against the real database |
+
+---
+
+## `apps/web/` — Web UI (Next.js 15)
+
+| File | Purpose |
+|------|---------|
+| `Dockerfile` | Standalone Next.js image, non-root `nextjs` user, health check on `/api/healthz` |
+| `next.config.ts` | Standalone output, Content-Security-Policy and security headers |
+| `app/layout.tsx`, `app/providers.tsx` | Fonts, pre-paint palette script, next-themes, TanStack Query, tooltips, toasts |
+| `app/globals.css`, `app/themes.css` | Tailwind v4 tokens; four palettes × light/dark (OKLCH); fixed status and epistemic-kind colors |
+| `app/api/[...path]/route.ts` | Runtime same-origin proxy to the API (`API_INTERNAL_URL`) |
+| `app/api/healthz/route.ts` | Web liveness for the container health check |
+| `app/page.tsx` | Dashboard: service cards, metrics with deployment markers, incidents, last investigation, auto-refresh |
+| `app/investigations/` | New investigation (live or replay) and `[id]`: trace, findings, sources, polling while running |
+| `app/incident-lab/page.tsx` | Scenario cards, confirmation, reset, traffic, live mini-charts, activity log |
+| `app/history/` | Server-paginated history table, incidents, replayable incidents; `incidents/[id]` timeline |
+| `app/system/page.tsx` | React Flow service map, component table, self-observability, safe config |
+| `components/ui/` | shadcn-style primitives (button, badge, card, dialog, tabs, tooltip, menu, inputs) |
+| `components/layout/` | App shell, sidebar, top bar (environment, read-only, health, appearance), command palette, help |
+| `components/domain/` | StatusBadge, ServiceCard, MetricChart, FindingsPanel, EvidenceItem, HypothesisCard, ConfidenceBreakdown, AgentTrace (+ graph), SourcesPanel/ToolCallRow, ApprovalDialog, ReplayView, honest states |
+| `lib/api/` | `client.ts` (fetch, X-Request-ID, timeouts), `schemas.ts` (zod for every response), `errors.ts` (codes → messages) |
+| `lib/epistemic.ts` | Report → seven ordered sections, citation resolution, unsupported-claim flags, Markdown export |
+| `lib/format.ts`, `lib/redact.ts`, `lib/themes.ts`, `lib/links.ts` | Formatting, credential redaction, palette list, pre-filled links |
+| `hooks/` | Query hooks with polling, palette, media query, copy |
+| `scripts/check-contrast.mjs` | WCAG contrast check of every palette/mode from the CSS tokens |
+| `scripts/export_fixtures.py` | Exports real replay payloads as test fixtures |
+| `tests/unit/` | Vitest: formatters, redaction, zod contracts, epistemic logic, components, security (inert untrusted content) |
+| `tests/e2e/` | Playwright: flagship flow, degraded mode, shell/keyboard/headers, axe on every page × palette × mode |
+| `tests/fixtures/` | Real API payloads (replays) |
 
 ---
 

@@ -12,12 +12,12 @@ import asyncio
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from datetime import UTC, datetime
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 import httpx
 import structlog
 from fastapi import APIRouter, Depends, Response
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import func, select, text
 
 from app.agents.tools import ToolClient, connect_mcp
@@ -71,6 +71,8 @@ class ServiceInfo(BaseModel):
     error_rate: float | None = None
     request_rate: float | None = None
     version: str | None = None
+    reasons: list[str] = Field(default_factory=list)
+    dependency_status: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class ServicesResponse(BaseModel):
@@ -86,6 +88,8 @@ async def list_services(
     session: SessionDep, connector: McpConnectorDep, health: bool = False
 ) -> ServicesResponse:
     registered = (await session.execute(select(Workload.name))).scalars().all()
+    # Return the connection to the pool before the (possibly slow) MCP calls.
+    await session.rollback()
     found: dict[str, ServiceInfo] = {
         name: ServiceInfo(name=name, project=None, sources=["registered"]) for name in registered
     }
@@ -120,6 +124,8 @@ async def list_services(
                 info.error_rate = h.get("error_rate")
                 info.request_rate = h.get("request_rate")
                 info.version = h.get("version")
+                info.reasons = list(h.get("reasons") or [])
+                info.dependency_status = list(h.get("dependency_status") or [])
     return ServicesResponse(
         services=sorted(found.values(), key=lambda s: s.name), telemetry_status=telemetry_status
     )

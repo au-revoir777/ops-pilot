@@ -450,3 +450,73 @@
     - `CONCLUSION`
   - That keeps one ordered audit trail per investigation, which is also what the UI will render.
 - **Ad-hoc questions:** a question without `incident_id` creates its own incident ("Investigation: <question>"), so every investigation stays attached to an incident (the `incident_id NOT NULL` invariant from D-015).
+
+---
+
+## D-034: Incident Lab goes through the API, limited to the demo workloads
+
+- **Date:** 2026-11-08 (Phase 8)
+- **Decision:** The browser never calls the workloads' `/admin/failure` directly. `POST /api/lab/failure` and `POST /api/lab/traffic` forward to a fixed allow-list (`LAB_TARGETS`, default checkout/payments/users), and only when `ENABLE_INCIDENT_LAB=true`. Otherwise they return 403 `LAB_DISABLED`.
+- **Why:**
+  - It keeps the workloads' admin token (`FAILURE_ADMIN_TOKEN`) server-side.
+  - It makes a monitored external project impossible to target. That project is never in the allow-list, which keeps the end-goal rule that OpsPilot is read-only toward it.
+- **Two switches:** the lab needs `ENABLE_INCIDENT_LAB=true` on the API *and* `ENABLE_FAILURE_INJECTION=true` on the workloads. Both default to off.
+- **Status is measured, not assumed:** the lab shows each service's mode as reported by `GET /admin/failure`, and health from Prometheus via MCP. It never infers state from the button press.
+- **Traffic:** sequential requests from the API, 1–300 per call, run as a background task. There is no rate/duration control; the UI says so.
+
+---
+
+## D-035: Frontend stack, runtime API proxy, and deviations from the UI brief
+
+- **Date:** 2026-11-08 (Phase 8)
+- **Stack (as the brief fixes it):**
+  - Next.js 15 App Router, TypeScript strict (`noUncheckedIndexedAccess`), Tailwind v4.
+  - shadcn-style primitives on Radix, Lucide icons, next-themes, TanStack Query and Table (v8), Recharts, React Flow (`@xyflow/react`), cmdk, Sonner, zod v4.
+  - Geist Sans and JetBrains Mono.
+  - Vitest + Testing Library, Playwright + `@axe-core/playwright`.
+- **Same-origin proxy at runtime:** `app/api/[...path]/route.ts` forwards `/api/*` to `API_INTERNAL_URL`.
+  - The browser only talks to the web server, so there is no CORS and no API address in client code.
+  - A route handler is used instead of a `next.config` rewrite because rewrites are fixed at build time; the image must be configurable at runtime.
+  - Only `accept`, `content-type` and `x-request-id` are forwarded upstream; only `content-type`, `x-request-id` and `x-total-count` come back.
+- **Content Security Policy** (`next.config.ts`):
+  - `default-src 'self'`, `connect-src 'self'`, `img-src 'self' data:`, `frame-ancestors 'none'`, `object-src 'none'`, `base-uri 'self'`, `form-action 'self'`.
+  - `script-src` and `style-src` allow `'unsafe-inline'`: Next's bootstrap scripts, the pre-paint theme scripts and inline style attributes need it without a nonce pipeline. Dev mode adds `'unsafe-eval'`.
+  - Also sent: `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, a strict referrer policy, and a permissions policy.
+- **Untrusted content:**
+  - Documents, logs, tool output and model text are rendered only as React text nodes. There is no Markdown/HTML rendering and no auto-linking.
+  - `react/no-danger` is an ESLint error.
+  - Credential-looking strings are redacted before render (`lib/redact.ts`).
+  - Proven by `tests/unit/security.test.tsx`.
+- **Themes:**
+  - Four palettes (Graphite default, Ocean, Ember, Forest), each light and dark, as OKLCH tokens in `app/themes.css`.
+  - Status colors are fixed and always paired with an icon and a word. Red used as *text* has its own mode-tuned token (`--status-down-text`) so it reaches 4.5:1 in dark mode without changing hue.
+  - `npm run contrast` checks 237 token pairs.
+  - The palette is applied by an inline script before first paint; next-themes does the same for dark mode.
+- **Deviations, and why:**
+  - **No Shiki.** Raw JSON in the Sources panel uses a small highlighter built from React elements (`components/domain/json-view.tsx`). Only JSON needs highlighting, and it avoids a large dependency and any HTML-string rendering.
+  - **No streaming progress.** The agent reports its steps only when it finishes, so the investigation page polls `GET /api/investigations/{id}` (every 2 s, configurable). It shows elapsed time and the timeline events that exist, and renders the trace all at once. Nothing is animated as fake progress. Cancellation isn't offered because the API doesn't support it.
+  - **No user menu.** The platform has no authentication yet (later phase); a menu with nothing in it would be misleading.
+  - **No list virtualization.** Tables are server-paginated (at most 50 rows) and the logs view is capped by the API's 20-item trim, so there is nothing long enough to virtualize yet.
+  - **Lab traffic** is a request count, not rate and duration (see D-034).
+  - **Loki and Grafana** show as "unknown" on System Status: nothing probes them directly. Loki failures surface in investigations as unavailable tool calls.
+- **API additions for the UI:**
+  - `GET /api/config`: safe public configuration only.
+  - `GET /api/metrics`: allow-listed recording rules via MCP.
+  - `GET /api/services/{service}/deployments`
+  - `GET /api/replays`, `POST /api/replays/{id}`: the real agent over recorded scenarios, offline, nothing stored.
+  - `GET /api/services?health=true`, which now includes `reasons` and `dependency_status`.
+  - `GET /api/investigations` gained server-side filters (`service`, `severity`, `q`, `since`, `until`), sorting (`created_at`, `latency_ms`, `confidence`), `severity` in each row, and an `X-Total-Count` header. Search text is matched literally; LIKE wildcards are escaped.
+  - The investigation's first timeline event stores the creating request's `request_id`, so the UI shows the correlation ID that matches the API logs.
+- **Agent fix found while building the Sources panel:** a passage flagged `possible_prompt_injection` could still be cited as a recommendation reference. It no longer is; a regression test covers it.
+- **Verified (2026-11-08, on the development laptop):**
+  - 64 Vitest tests pass: unit, component, zod contracts against real replay payloads, and security.
+  - 237 contrast checks pass.
+  - Playwright against the running Compose stack: the flagship flow passes (inject DB slowness → traffic → dashboard turns degraded → investigate → labelled diagnosis, 57 s). So do the degraded-mode tests (intercepted outage) and the shell tests (read-only indicator, command palette, shortcuts, security headers).
+  - axe-core (WCAG 2.1 A/AA) reports no violations on any of the six pages, in all 4 palettes × light/dark.
+  - Lighthouse was not run.
+- **Bugs found by these tests and fixed:**
+  - cmdk's fuzzy match ranked "copy correlation id" first for the query "ocean", so Enter ran the wrong action. Matching is now word-prefix based.
+  - Recharts' keyboard layer sat inside an `aria-hidden` wrapper. Charts keep their text summary and data-table toggle instead.
+  - The health link's accessible name didn't start with its visible text.
+  - The MCP client turned a transport timeout during session close into a 500. It is now logged and ignored, since each call has already reported "unavailable".
+  - `/api/services` held a database connection during slow MCP calls; the connection is now released first.

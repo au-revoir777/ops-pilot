@@ -95,6 +95,10 @@ services:
       PROMETHEUS_URL: http://prometheus:9090
       LOKI_URL: http://loki:3100
       RAG_DOCS_PATH: /app/knowledge
+      # Incident lab (demo services only). Also needs ENABLE_FAILURE_INJECTION=true on the workloads.
+      ENABLE_INCIDENT_LAB: ${ENABLE_INCIDENT_LAB:-false}
+      FAILURE_ADMIN_TOKEN: ${FAILURE_ADMIN_TOKEN:-}
+      PUBLIC_GRAFANA_URL: ${PUBLIC_GRAFANA_URL:-http://localhost:${GRAFANA_PORT:-3000}}
     volumes:
       # Knowledge base for RAG; ingest with: docker compose exec api python -m app.rag.ingest
       - ./docs/knowledge:/app/knowledge:ro
@@ -282,11 +286,14 @@ services:
     build:
       context: ./apps/web
       dockerfile: Dockerfile
+    image: opspilot-web:local
     container_name: opspilot-web
+    init: true
     environment:
-      NEXT_PUBLIC_API_URL: http://api:8000
+      # Server-side only: Next.js proxies /api/* here, so the browser never needs the API's address.
+      API_INTERNAL_URL: http://api:8000
     ports:
-      - "3001:3000"
+      - "127.0.0.1:${WEB_PORT:-3001}:3000"
     depends_on:
       - api
     restart: unless-stopped

@@ -198,6 +198,51 @@ async def test_list_investigations_newest_first(client: AsyncClient, db_session:
     assert (await client.get("/api/investigations", params={"limit": 0})).status_code == 422
 
 
+async def test_history_filters_sort_and_total(client: AsyncClient, db_session: AsyncSession):
+    first = (await client.post("/api/investigations", json=QUESTION)).json()
+    other = (
+        await client.post(
+            "/api/investigations", json={"query": "Why is payments slow?", "service": "payments"}
+        )
+    ).json()
+    await db_session.execute(
+        text("UPDATE investigations SET latency_ms = 10 WHERE id = :id"), {"id": first["id"]}
+    )
+    # The simulated agent always diagnoses checkout; pin the second one to payments.
+    await db_session.execute(
+        text("UPDATE investigations SET service = 'payments' WHERE id = :id"), {"id": other["id"]}
+    )
+
+    response = await client.get("/api/investigations", params={"service": "checkout"})
+    assert response.headers["X-Total-Count"] == "1"
+    assert [i["id"] for i in response.json()] == [first["id"]]
+    assert response.json()[0]["severity"] == "SEV3"  # from the incident
+
+    searched = (await client.get("/api/investigations", params={"q": "PAYMENTS"})).json()
+    assert [i["id"] for i in searched] == [other["id"]]
+    # LIKE wildcards in the search text are literal, not patterns.
+    assert (await client.get("/api/investigations", params={"q": "Rele%regression"})).json() == []
+
+    by_latency = (
+        await client.get("/api/investigations", params={"sort": "latency_ms", "order": "asc"})
+    ).json()
+    assert by_latency[0]["id"] == first["id"]
+
+    paged = await client.get("/api/investigations", params={"limit": 1, "offset": 1})
+    assert paged.headers["X-Total-Count"] == "2"
+    assert len(paged.json()) == 1
+    assert (await client.get("/api/investigations", params={"severity": "SEV1"})).json() == []
+    assert (await client.get("/api/investigations", params={"sort": "nope"})).status_code == 422
+
+
+async def test_investigation_records_creating_request_id(client: AsyncClient):
+    response = await client.post(
+        "/api/investigations", json=QUESTION, headers={"X-Request-ID": "ui-req-123"}
+    )
+    created = response.json()["events"][0]
+    assert created["details"]["request_id"] == "ui-req-123"
+
+
 class PerToolFake:
     async def call(self, tool, arguments):
         if tool == "query_metrics":

@@ -4,13 +4,15 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, BackgroundTasks, Query, Response
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.config import get_settings
+from app.db.models.incident import IncidentSeverity
 from app.db.models.investigation import InvestigationEventType, InvestigationStatus
+from app.db.repositories.investigation import InvestigationFilters, SortField
 from app.dependencies import (
     AgentFactoryDep,
     BackgroundSessionFactoryDep,
@@ -78,6 +80,10 @@ class InvestigationSummary(BaseModel):
     updated_at: datetime
 
 
+class InvestigationListItem(InvestigationSummary):
+    severity: IncidentSeverity | None = None  # from the investigated incident
+
+
 class InvestigationDetail(InvestigationSummary):
     report: dict[str, Any] | None = Field(
         description="Full agent report: observations, evidence, hypotheses, recommendations"
@@ -113,16 +119,38 @@ async def create_investigation(
     return InvestigationDetail.model_validate(finished)
 
 
-@router.get("/investigations", response_model=list[InvestigationSummary])
+@router.get("/investigations", response_model=list[InvestigationListItem])
 async def list_investigations(
     service: InvestigationServiceDep,
+    response: Response,
     status: InvestigationStatus | None = None,
+    service_name: Annotated[
+        str | None, Query(alias="service", max_length=100, pattern=r"^[a-z0-9][a-z0-9_-]*$")
+    ] = None,
+    severity: IncidentSeverity | None = None,
+    q: Annotated[str | None, Query(max_length=200)] = None,
+    since: datetime | None = None,
+    until: datetime | None = None,
+    sort: SortField = "created_at",
+    order: Literal["asc", "desc"] = "desc",
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
-) -> list[InvestigationSummary]:
-    """Most recent investigations first (history view)."""
-    investigations = await service.list_investigations(limit=limit, offset=offset, status=status)
-    return [InvestigationSummary.model_validate(i) for i in investigations]
+) -> list[InvestigationListItem]:
+    """History view: filtered, sorted, paginated server-side. X-Total-Count has the total."""
+    filters = InvestigationFilters(
+        status=status, service=service_name, severity=severity, text=q or None,
+        since=since, until=until, sort=sort, ascending=order == "asc",
+    )  # fmt: skip
+    investigations, total = await service.list_investigations(
+        limit=limit, offset=offset, filters=filters
+    )
+    response.headers["X-Total-Count"] = str(total)
+    return [
+        InvestigationListItem.model_validate(i).model_copy(
+            update={"severity": i.incident.severity if i.incident else None}
+        )
+        for i in investigations
+    ]
 
 
 @router.get("/investigations/{investigation_id}", response_model=InvestigationDetail)

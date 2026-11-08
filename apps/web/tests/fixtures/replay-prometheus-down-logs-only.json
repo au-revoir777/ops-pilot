@@ -1,0 +1,594 @@
+{
+  "case": {
+    "id": "prometheus-down-logs-only",
+    "question": "checkout latency is high, investigate",
+    "expected_service": "checkout",
+    "expected_root_cause": "database_degradation",
+    "unavailable_sources": [
+      "prometheus"
+    ]
+  },
+  "match": true,
+  "service_match": true,
+  "report": {
+    "query": "checkout latency is high, investigate",
+    "service": "checkout",
+    "symptoms": [
+      "latency"
+    ],
+    "window_minutes": 60,
+    "observations": [
+      {
+        "id": "F1",
+        "kind": "log",
+        "statement": "40 slow_query_detected warnings in checkout logs (select_cart_items (20), insert_order (20), typical 900 ms)",
+        "source": "get_recent_logs",
+        "at": null,
+        "signals": [
+          "db_slow_logs"
+        ],
+        "data": {
+          "count": 40,
+          "operations": {
+            "select_cart_items": 20,
+            "insert_order": 20
+          },
+          "sample_request_ids": [
+            "req-slow-0",
+            "req-slow-1",
+            "req-slow-2"
+          ]
+        }
+      },
+      {
+        "id": "F2",
+        "kind": "log",
+        "statement": "30 request_slow warnings (requests over 1 s) in checkout logs",
+        "source": "get_recent_logs",
+        "at": null,
+        "signals": [
+          "symptom_latency"
+        ],
+        "data": {
+          "count": 30
+        }
+      }
+    ],
+    "evidence": [
+      {
+        "id": "K1",
+        "citation": "postmortems/2026-09-checkout-slow-query.md#chunk-0",
+        "title": "Postmortem: checkout latency from a cart query regression",
+        "section": "Root cause",
+        "score": 0.81,
+        "excerpt": "Release 1.7.4 changed the cart query; slow_query_detected warnings appeared. Rolling back restored latency.",
+        "flags": []
+      },
+      {
+        "id": "K2",
+        "citation": "troubleshooting/database-troubleshooting.md#chunk-1",
+        "title": "Database troubleshooting guide",
+        "section": "Is it the database or the service?",
+        "score": 0.77,
+        "excerpt": "If query latency and request latency rise together, the database path is the bottleneck. A slow query after a release suggests a query regression.",
+        "flags": []
+      },
+      {
+        "id": "K3",
+        "citation": "procedures/deployment-rollback.md#chunk-2",
+        "title": "Deployment rollback procedure",
+        "section": "Rolling back",
+        "score": 0.74,
+        "excerpt": "Roll back when an incident starts shortly after a release. Redeploy the previous image tag.",
+        "flags": []
+      },
+      {
+        "id": "K4",
+        "citation": "architecture/service-dependencies.md#chunk-3",
+        "title": "Service dependency map",
+        "section": "Reading the map",
+        "score": 0.72,
+        "excerpt": "A problem in users or payments surfaces as checkout errors (502) or latency because checkout calls both on every request; dependency errors cascade.",
+        "flags": []
+      }
+    ],
+    "hypotheses": [
+      {
+        "id": "H1",
+        "cause": "database_degradation",
+        "statement": "Database queries of checkout became slow",
+        "supporting": [
+          "F2",
+          "F1",
+          "K1",
+          "K2"
+        ],
+        "contradicting": [],
+        "contradictions": [],
+        "confidence": {
+          "base": 0.1,
+          "temporal": 0.0,
+          "metric": 0.0,
+          "log": 0.2,
+          "deployment": 0.0,
+          "knowledge": 0.1,
+          "contradictions": -0.0,
+          "coverage_factor": 0.72,
+          "value": 0.288
+        },
+        "status": "weak"
+      }
+    ],
+    "conclusion": "Tentative root cause (low confidence; key evidence is missing): Database queries of checkout became slow (confidence 29%, heuristic). Supported by F2, F1, K1, K2.",
+    "root_cause": "database_degradation",
+    "confidence": 0.288,
+    "confidence_breakdown": {
+      "base": 0.1,
+      "temporal": 0.0,
+      "metric": 0.0,
+      "log": 0.2,
+      "deployment": 0.0,
+      "knowledge": 0.1,
+      "contradictions": -0.0,
+      "coverage_factor": 0.72,
+      "value": 0.288
+    },
+    "recommendations": [
+      {
+        "action": "Follow the database troubleshooting guide for checkout",
+        "rationale": "Query latency rose without a release in the window.",
+        "requires_human_approval": false,
+        "references": [
+          "troubleshooting/database-troubleshooting.md#chunk-1"
+        ]
+      }
+    ],
+    "missing_evidence": [
+      "get_service_health: prometheus_unavailable (simulated outage)",
+      "get_incident_events: prometheus_unavailable (simulated outage)",
+      "get_recent_deployments: prometheus_unavailable (simulated outage)",
+      "get_service_dependencies: prometheus_unavailable (simulated outage)",
+      "query_metrics: prometheus_unavailable (simulated outage)"
+    ],
+    "tool_calls": [
+      {
+        "tool": "get_service_health",
+        "arguments": {
+          "service": "checkout"
+        },
+        "status": "unavailable",
+        "duration_ms": 0.0,
+        "error": "prometheus_unavailable",
+        "result_summary": "unavailable: prometheus_unavailable",
+        "result": {
+          "status": "unavailable",
+          "errors": [
+            {
+              "source": "prometheus",
+              "error": "prometheus_unavailable",
+              "detail": "simulated outage"
+            }
+          ]
+        }
+      },
+      {
+        "tool": "get_incident_events",
+        "arguments": {
+          "service": "checkout",
+          "minutes": 60
+        },
+        "status": "unavailable",
+        "duration_ms": 0.0,
+        "error": "prometheus_unavailable",
+        "result_summary": "unavailable: prometheus_unavailable",
+        "result": {
+          "status": "unavailable",
+          "errors": [
+            {
+              "source": "prometheus",
+              "error": "prometheus_unavailable",
+              "detail": "simulated outage"
+            }
+          ]
+        }
+      },
+      {
+        "tool": "get_recent_deployments",
+        "arguments": {
+          "service": "checkout",
+          "lookback_hours": 2
+        },
+        "status": "unavailable",
+        "duration_ms": 0.0,
+        "error": "prometheus_unavailable",
+        "result_summary": "unavailable: prometheus_unavailable",
+        "result": {
+          "status": "unavailable",
+          "errors": [
+            {
+              "source": "prometheus",
+              "error": "prometheus_unavailable",
+              "detail": "simulated outage"
+            }
+          ]
+        }
+      },
+      {
+        "tool": "get_service_dependencies",
+        "arguments": {
+          "service": "checkout"
+        },
+        "status": "unavailable",
+        "duration_ms": 0.0,
+        "error": "prometheus_unavailable",
+        "result_summary": "unavailable: prometheus_unavailable",
+        "result": {
+          "status": "unavailable",
+          "errors": [
+            {
+              "source": "prometheus",
+              "error": "prometheus_unavailable",
+              "detail": "simulated outage"
+            }
+          ]
+        }
+      },
+      {
+        "tool": "query_metrics",
+        "arguments": {
+          "query": "max(service:http_latency_seconds:p95_1m{service=\"checkout\"})",
+          "start_time": "now-60m"
+        },
+        "status": "unavailable",
+        "duration_ms": 0.0,
+        "error": "prometheus_unavailable",
+        "result_summary": "unavailable: prometheus_unavailable",
+        "result": {
+          "status": "unavailable",
+          "errors": [
+            {
+              "source": "prometheus",
+              "error": "prometheus_unavailable",
+              "detail": "simulated outage"
+            }
+          ]
+        }
+      },
+      {
+        "tool": "get_recent_logs",
+        "arguments": {
+          "service": "checkout",
+          "minutes": 60,
+          "severity": "warning",
+          "limit": 200
+        },
+        "status": "ok",
+        "duration_ms": 0.3,
+        "error": null,
+        "result_summary": "70 log entries",
+        "result": {
+          "status": "ok",
+          "errors": [],
+          "service": "checkout",
+          "entries": [
+            {
+              "timestamp": "2026-11-08T12:00:00+00:00",
+              "level": "warning",
+              "message": "slow_query_detected",
+              "metadata": {
+                "request_id": "req-slow-0",
+                "operation": "select_cart_items",
+                "query_time_ms": 900
+              }
+            },
+            {
+              "timestamp": "2026-11-08T11:59:50+00:00",
+              "level": "warning",
+              "message": "slow_query_detected",
+              "metadata": {
+                "request_id": "req-slow-1",
+                "operation": "insert_order",
+                "query_time_ms": 900
+              }
+            },
+            {
+              "timestamp": "2026-11-08T11:59:40+00:00",
+              "level": "warning",
+              "message": "slow_query_detected",
+              "metadata": {
+                "request_id": "req-slow-2",
+                "operation": "select_cart_items",
+                "query_time_ms": 900
+              }
+            },
+            {
+              "timestamp": "2026-11-08T11:59:30+00:00",
+              "level": "warning",
+              "message": "slow_query_detected",
+              "metadata": {
+                "request_id": "req-slow-3",
+                "operation": "insert_order",
+                "query_time_ms": 900
+              }
+            },
+            {
+              "timestamp": "2026-11-08T11:59:20+00:00",
+              "level": "warning",
+              "message": "slow_query_detected",
+              "metadata": {
+                "request_id": "req-slow-4",
+                "operation": "select_cart_items",
+                "query_time_ms": 900
+              }
+            },
+            {
+              "timestamp": "2026-11-08T11:59:10+00:00",
+              "level": "warning",
+              "message": "slow_query_detected",
+              "metadata": {
+                "request_id": "req-slow-5",
+                "operation": "insert_order",
+                "query_time_ms": 900
+              }
+            },
+            {
+              "timestamp": "2026-11-08T11:59:00+00:00",
+              "level": "warning",
+              "message": "slow_query_detected",
+              "metadata": {
+                "request_id": "req-slow-6",
+                "operation": "select_cart_items",
+                "query_time_ms": 900
+              }
+            },
+            {
+              "timestamp": "2026-11-08T11:58:50+00:00",
+              "level": "warning",
+              "message": "slow_query_detected",
+              "metadata": {
+                "request_id": "req-slow-7",
+                "operation": "insert_order",
+                "query_time_ms": 900
+              }
+            },
+            {
+              "timestamp": "2026-11-08T11:58:40+00:00",
+              "level": "warning",
+              "message": "slow_query_detected",
+              "metadata": {
+                "request_id": "req-slow-8",
+                "operation": "select_cart_items",
+                "query_time_ms": 900
+              }
+            },
+            {
+              "timestamp": "2026-11-08T11:58:30+00:00",
+              "level": "warning",
+              "message": "slow_query_detected",
+              "metadata": {
+                "request_id": "req-slow-9",
+                "operation": "insert_order",
+                "query_time_ms": 900
+              }
+            },
+            {
+              "timestamp": "2026-11-08T11:58:20+00:00",
+              "level": "warning",
+              "message": "slow_query_detected",
+              "metadata": {
+                "request_id": "req-slow-10",
+                "operation": "select_cart_items",
+                "query_time_ms": 900
+              }
+            },
+            {
+              "timestamp": "2026-11-08T11:58:10+00:00",
+              "level": "warning",
+              "message": "slow_query_detected",
+              "metadata": {
+                "request_id": "req-slow-11",
+                "operation": "insert_order",
+                "query_time_ms": 900
+              }
+            },
+            {
+              "timestamp": "2026-11-08T11:58:00+00:00",
+              "level": "warning",
+              "message": "slow_query_detected",
+              "metadata": {
+                "request_id": "req-slow-12",
+                "operation": "select_cart_items",
+                "query_time_ms": 900
+              }
+            },
+            {
+              "timestamp": "2026-11-08T11:57:50+00:00",
+              "level": "warning",
+              "message": "slow_query_detected",
+              "metadata": {
+                "request_id": "req-slow-13",
+                "operation": "insert_order",
+                "query_time_ms": 900
+              }
+            },
+            {
+              "timestamp": "2026-11-08T11:57:40+00:00",
+              "level": "warning",
+              "message": "slow_query_detected",
+              "metadata": {
+                "request_id": "req-slow-14",
+                "operation": "select_cart_items",
+                "query_time_ms": 900
+              }
+            },
+            {
+              "timestamp": "2026-11-08T11:57:30+00:00",
+              "level": "warning",
+              "message": "slow_query_detected",
+              "metadata": {
+                "request_id": "req-slow-15",
+                "operation": "insert_order",
+                "query_time_ms": 900
+              }
+            },
+            {
+              "timestamp": "2026-11-08T11:57:20+00:00",
+              "level": "warning",
+              "message": "slow_query_detected",
+              "metadata": {
+                "request_id": "req-slow-16",
+                "operation": "select_cart_items",
+                "query_time_ms": 900
+              }
+            },
+            {
+              "timestamp": "2026-11-08T11:57:10+00:00",
+              "level": "warning",
+              "message": "slow_query_detected",
+              "metadata": {
+                "request_id": "req-slow-17",
+                "operation": "insert_order",
+                "query_time_ms": 900
+              }
+            },
+            {
+              "timestamp": "2026-11-08T11:57:00+00:00",
+              "level": "warning",
+              "message": "slow_query_detected",
+              "metadata": {
+                "request_id": "req-slow-18",
+                "operation": "select_cart_items",
+                "query_time_ms": 900
+              }
+            },
+            {
+              "timestamp": "2026-11-08T11:56:50+00:00",
+              "level": "warning",
+              "message": "slow_query_detected",
+              "metadata": {
+                "request_id": "req-slow-19",
+                "operation": "insert_order",
+                "query_time_ms": 900
+              }
+            }
+          ],
+          "entries_truncated": 50
+        }
+      },
+      {
+        "tool": "query_metrics",
+        "arguments": {
+          "query": "max(service_operation:db_query_seconds:p95_1m{service=\"checkout\"})",
+          "start_time": "now-60m"
+        },
+        "status": "unavailable",
+        "duration_ms": 0.0,
+        "error": "prometheus_unavailable",
+        "result_summary": "unavailable: prometheus_unavailable",
+        "result": {
+          "status": "unavailable",
+          "errors": [
+            {
+              "source": "prometheus",
+              "error": "prometheus_unavailable",
+              "detail": "simulated outage"
+            }
+          ]
+        }
+      },
+      {
+        "tool": "get_recent_deployments",
+        "arguments": {
+          "service": "checkout",
+          "lookback_hours": 6
+        },
+        "status": "unavailable",
+        "duration_ms": 0.0,
+        "error": "prometheus_unavailable",
+        "result_summary": "unavailable: prometheus_unavailable",
+        "result": {
+          "status": "unavailable",
+          "errors": [
+            {
+              "source": "prometheus",
+              "error": "prometheus_unavailable",
+              "detail": "simulated outage"
+            }
+          ]
+        }
+      },
+      {
+        "tool": "get_recent_logs",
+        "arguments": {
+          "service": "checkout",
+          "minutes": 120,
+          "severity": "error",
+          "limit": 200
+        },
+        "status": "ok",
+        "duration_ms": 0.0,
+        "error": null,
+        "result_summary": "0 log entries",
+        "result": {
+          "status": "ok",
+          "errors": [],
+          "service": "checkout",
+          "entries": []
+        }
+      }
+    ],
+    "trace": [
+      {
+        "node": "planner",
+        "duration_ms": 0.3,
+        "summary": "service=checkout, symptoms=['latency'], 7 tool calls planned"
+      },
+      {
+        "node": "rag",
+        "duration_ms": 0.5,
+        "summary": "4 knowledge passages retrieved"
+      },
+      {
+        "node": "mcp",
+        "duration_ms": 0.9,
+        "summary": "7 tool calls, 2 observations"
+      },
+      {
+        "node": "hypothesis",
+        "duration_ms": 0.3,
+        "summary": "1 hypotheses: database_degradation"
+      },
+      {
+        "node": "validator",
+        "duration_ms": 0.2,
+        "summary": "round 1: best=database_degradation (0.28), insufficient -> more_evidence"
+      },
+      {
+        "node": "mcp",
+        "duration_ms": 0.4,
+        "summary": "2 tool calls, 2 observations"
+      },
+      {
+        "node": "hypothesis",
+        "duration_ms": 0.1,
+        "summary": "1 hypotheses: database_degradation"
+      },
+      {
+        "node": "validator",
+        "duration_ms": 0.1,
+        "summary": "round 2: best=database_degradation (0.29), insufficient -> synthesize"
+      },
+      {
+        "node": "synthesizer",
+        "duration_ms": 0.1,
+        "summary": "Tentative root cause (low confidence; key evidence is missing): Database queries of checkout became slow (confidence 29%, heuristic). Supported by F2, F1, K1, K"
+      }
+    ],
+    "iterations": 2,
+    "llm": {
+      "provider": "none",
+      "status": "not_used"
+    },
+    "completed": true
+  }
+}

@@ -2,7 +2,7 @@
 # OpsPilot â€” Makefile
 # =============================================================================
 .PHONY: help setup dev up down build test test-unit test-integration test-system \
-        test-evaluation test-db-up test-db-down migrate lint scan ingest ingest-docker rag-eval incident traffic cloud-up cloud-down clean
+        test-evaluation test-db-up test-db-down test-web test-web-e2e lint lint-web scan ingest ingest-docker rag-eval incident traffic cloud-up cloud-down clean
 
 COMPOSE := docker compose
 PYTHON  := python
@@ -66,12 +66,24 @@ test-system: ## Run system / E2E tests
 test-evaluation: ## Run agent evaluation tests
 	pytest -m evaluation -v
 
+test-web: ## Frontend: type-check, unit/component/security tests, contrast check
+	cd apps/web && npm run typecheck && npm test && npm run contrast
+
+test-web-e2e: ## Frontend: Playwright e2e + axe against the running stack (web on :3001)
+	cd apps/web && npx playwright test
+
+web-fixtures: ## Re-export real API payloads as frontend test fixtures
+	cd apps/api && PYTHONPATH=. $(PYTHON) ../web/scripts/export_fixtures.py
+
 # ---------------------------------------------------------------------------
 # Quality
 # ---------------------------------------------------------------------------
 lint: ## Lint with Ruff
 	ruff check .
 	ruff format --check .
+
+lint-web: ## Lint the frontend with ESLint
+	cd apps/web && npm run lint
 
 lint-fix: ## Auto-fix lint issues
 	ruff check --fix .

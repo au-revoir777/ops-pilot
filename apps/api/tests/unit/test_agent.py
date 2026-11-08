@@ -375,6 +375,9 @@ async def test_poisoned_knowledge_does_not_change_the_diagnosis():
     assert report.root_cause == "database_degradation"
     assert any("possible_prompt_injection" in e.flags for e in report.evidence)
     assert all(name != "restart_database" for name, _ in tools.calls)
+    # A flagged passage is shown, but never cited as backing a recommendation.
+    cited = [ref for rec in report.recommendations for ref in rec.references]
+    assert cited and not any(ref.startswith("runbooks/evil.md") for ref in cited)
 
 
 # ---------------------------------------------------------------------------
@@ -444,3 +447,33 @@ def test_db_slow_for_whole_window_counts_as_rise_not_flat():
         flat, "checkout", {"status": "ok", "series": [{"points": series([0.04] * 12)}]}
     )
     assert flat.observations[0].signals == ["db_latency_flat"]
+
+
+async def test_mcp_transport_error_on_close_does_not_escape(monkeypatch):
+    """A read timeout re-raised by the SDK when the session closes must not become a 500."""
+    from contextlib import asynccontextmanager
+
+    from app.agents import tools as tools_module
+
+    @asynccontextmanager
+    async def broken_transport(*_args, **_kwargs):
+        yield None, None, None
+        raise ExceptionGroup("unhandled errors in a TaskGroup", [TimeoutError("read timeout")])
+
+    class FakeSession:
+        def __init__(self, *_args):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_exc):
+            return False
+
+        async def initialize(self):
+            return None
+
+    monkeypatch.setattr(tools_module, "streamable_http_client", broken_transport)
+    monkeypatch.setattr(tools_module, "ClientSession", FakeSession)
+    async with tools_module.connect_mcp("http://mcp:8001", None) as client:
+        assert client.session is not None

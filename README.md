@@ -45,7 +45,7 @@ Browser (Next.js) → FastAPI API → Agent (LangGraph)
 
 | Layer          | Technology                          |
 |----------------|-------------------------------------|
-| Frontend       | Next.js, TypeScript, Tailwind CSS   |
+| Frontend       | Next.js 15, TypeScript, Tailwind v4, Radix, TanStack Query/Table, Recharts, React Flow |
 | Backend        | Python, FastAPI, Pydantic           |
 | Agent          | LangGraph, LangChain               |
 | RAG            | PostgreSQL, pgvector                |
@@ -56,7 +56,7 @@ Browser (Next.js) → FastAPI API → Agent (LangGraph)
 | Cloud          | AWS (ECS Fargate, RDS, ALB, ECR)    |
 | IaC            | Terraform                           |
 | CI/CD          | GitHub Actions                      |
-| Testing        | pytest, evaluation harness          |
+| Testing        | pytest, evaluation harness, Vitest, Playwright, axe-core |
 | Security       | Trivy, least-privilege IAM          |
 
 ## Quick Start
@@ -245,6 +245,35 @@ The agent works without any LLM. Set `LLM_PROVIDER` (`openai` or `anthropic`),
 `LLM_MODEL` and `LLM_API_KEY` to add a labelled, model-written summary. See
 [docs/design/agent.md](docs/design/agent.md).
 
+## Web UI
+
+The UI (`apps/web`, http://localhost:3001) is built around one question: what
+does OpsPilot actually know? Every investigation is split into observed facts,
+retrieved evidence, hypotheses, contradictions and gaps, validation, diagnosis
+and recommendation. Each claim links to the tool call or document behind it,
+and a claim with nothing behind it is flagged as unsupported.
+
+| Page | What it shows |
+|------|---------------|
+| Dashboard | Service health cards, request/error/latency charts with deployment markers, active incidents, the last investigation. Refreshes every 15 s. |
+| Investigations | Ask a question or replay a recorded incident. The detail page shows the agent trace (steps or graph), findings, and sources (documents, tool calls with raw JSON, log excerpts). |
+| Incident Lab | Inject latency, errors or DB slowness into the demo services, generate traffic and watch the charts respond. Every action is logged with its correlation ID. |
+| Incident History | Server-side filtered and paginated history, incidents with timelines, and replayable incidents with match/mismatch against the recorded root cause. |
+| System Status | Service map of OpsPilot's own components with live health, plus the safe public configuration. |
+
+```bash
+docker compose up -d --build web          # web on 127.0.0.1:3001, proxies /api/* to the API
+# The incident lab needs both switches (demo services only):
+ENABLE_INCIDENT_LAB=true ENABLE_FAILURE_INJECTION=true docker compose up -d api checkout payments users
+
+cd apps/web && npm ci && npm run dev      # dev server on :3001 (API_INTERNAL_URL defaults to 127.0.0.1:8000)
+```
+
+- **Read-only:** the top bar shows a READ-ONLY indicator. Recommendations are proposals with copyable instructions; OpsPilot has no endpoint that executes them.
+- **Untrusted content:** documents, logs and model text render as plain text only, with credential-looking values redacted. Chunks flagged as possible prompt injection carry a warning.
+- **Appearance:** four palettes (Graphite, Ocean, Ember, Forest), each light and dark. Status colors never change between palettes. `npm run contrast` checks them against WCAG AA.
+- **Keyboard:** Ctrl/Cmd+K opens the command palette, `?` lists shortcuts, and `g` then `d`/`i`/`l`/`h`/`s` jumps between pages.
+
 ## Investigation API
 
 ```bash
@@ -281,6 +310,9 @@ make test              # unit + integration (system/evaluation excluded)
 make test-system       # needs the running stack (see Observability)
 pytest -m evaluation   # retrieval quality with the real embedding model
 make lint              # Ruff lint + format check
+make test-web          # frontend: type-check, Vitest (unit, component, security), contrast
+make lint-web          # ESLint (react/no-danger is an error)
+make test-web-e2e      # Playwright + axe against the running stack (web on :3001)
 ```
 
 Integration tests read `TEST_DATABASE_URL` (default: the `postgres-test`
@@ -289,29 +321,6 @@ The schema is built once with `alembic upgrade head`. Each test runs inside a
 transaction that is rolled back afterwards; service commits become SAVEPOINT
 releases, so tests never leak state into each other.
 
-## Project Status
-
-- [x] Phase 0: Project Bootstrap
-- [x] Phase 1: Database & Core Backend
-- [x] Phase 2: Demo Workloads
-- [x] Phase 3: Observability
-- [x] Phase 4: RAG Pipeline
-- [x] Phase 5: MCP Server
-- [x] Phase 6: Agent
-- [x] Phase 7: Investigation API
-- [ ] Phase 8: Frontend
-- [ ] Phase 9: E2E Incident Scenario
-- [ ] Phase 10: Testing Expansion
-- [ ] Phase 11: Security Hardening
-- [ ] Phase 12: Docker Production Parity
-- [ ] Phase 13: CI/CD
-- [ ] Phase 14: Terraform
-- [ ] Phase 15: AWS Deployment
-- [ ] Phase 16: Cost Controls
-- [ ] Phase 17: Performance & Reliability
-- [ ] Phase 18: Architecture Documentation
-- [ ] Phase 19: Interview Preparation
-- [ ] Phase 20: Final Audit
 
 ## License
 

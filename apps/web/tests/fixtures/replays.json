@@ -1,0 +1,106 @@
+[
+  {
+    "id": "deploy-db-regression",
+    "question": "Investigate why checkout latency increased",
+    "expected_service": "checkout",
+    "expected_root_cause": "deployment_db_regression",
+    "unavailable_sources": []
+  },
+  {
+    "id": "db-slow-no-deploy",
+    "question": "Checkout is slow, why?",
+    "expected_service": "checkout",
+    "expected_root_cause": "database_degradation",
+    "unavailable_sources": []
+  },
+  {
+    "id": "payments-dependency-errors",
+    "question": "Why is checkout returning errors?",
+    "expected_service": "checkout",
+    "expected_root_cause": "dependency_failure",
+    "unavailable_sources": []
+  },
+  {
+    "id": "payments-bad-release-errors",
+    "question": "payments started failing requests",
+    "expected_service": "payments",
+    "expected_root_cause": "deployment_regression",
+    "unavailable_sources": []
+  },
+  {
+    "id": "users-app-errors-no-release",
+    "question": "users service errors are spiking",
+    "expected_service": "users",
+    "expected_root_cause": "application_errors",
+    "unavailable_sources": []
+  },
+  {
+    "id": "old-release-db-slow",
+    "question": "Investigate checkout latency",
+    "expected_service": "checkout",
+    "expected_root_cause": "database_degradation",
+    "unavailable_sources": []
+  },
+  {
+    "id": "release-after-onset",
+    "question": "why did checkout latency go up",
+    "expected_service": "checkout",
+    "expected_root_cause": "database_degradation",
+    "unavailable_sources": []
+  },
+  {
+    "id": "healthy-no-incident",
+    "question": "Is users slow right now?",
+    "expected_service": "users",
+    "expected_root_cause": null,
+    "unavailable_sources": []
+  },
+  {
+    "id": "unknown-service",
+    "question": "Why is the mobile app broken?",
+    "expected_service": null,
+    "expected_root_cause": null,
+    "unavailable_sources": []
+  },
+  {
+    "id": "loki-down-deploy-db",
+    "question": "Investigate why checkout latency increased",
+    "expected_service": "checkout",
+    "expected_root_cause": "deployment_db_regression",
+    "unavailable_sources": [
+      "get_recent_logs"
+    ]
+  },
+  {
+    "id": "prometheus-down-logs-only",
+    "question": "checkout latency is high, investigate",
+    "expected_service": "checkout",
+    "expected_root_cause": "database_degradation",
+    "unavailable_sources": [
+      "prometheus"
+    ]
+  },
+  {
+    "id": "users-timeouts-cascade",
+    "question": "checkout requests are timing out",
+    "expected_service": "checkout",
+    "expected_root_cause": "dependency_failure",
+    "unavailable_sources": []
+  },
+  {
+    "id": "knowledge-base-down",
+    "question": "Investigate why checkout latency increased",
+    "expected_service": "checkout",
+    "expected_root_cause": "deployment_db_regression",
+    "unavailable_sources": [
+      "knowledge base"
+    ]
+  },
+  {
+    "id": "poisoned-knowledge",
+    "question": "Investigate why checkout latency increased",
+    "expected_service": "checkout",
+    "expected_root_cause": "database_degradation",
+    "unavailable_sources": []
+  }
+]

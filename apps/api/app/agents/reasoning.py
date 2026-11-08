@@ -303,10 +303,12 @@ def recommend(
     """Recommendations only; the agent never executes remediation (spec section 17)."""
 
     def refs(*terms: str) -> list[str]:
+        # Flagged (possible prompt injection) passages are never cited as a reference.
         return [
             e.citation
             for e in evidence
-            if any(t in e.excerpt.lower() or t in e.title.lower() for t in terms)
+            if "possible_prompt_injection" not in e.flags
+            and any(t in e.excerpt.lower() or t in e.title.lower() for t in terms)
         ][:3]
 
     if best is None or best.status == "rejected":

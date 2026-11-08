@@ -1,0 +1,1227 @@
+{
+  "case": {
+    "id": "deploy-db-regression",
+    "question": "Investigate why checkout latency increased",
+    "expected_service": "checkout",
+    "expected_root_cause": "deployment_db_regression",
+    "unavailable_sources": []
+  },
+  "match": true,
+  "service_match": true,
+  "report": {
+    "query": "Investigate why checkout latency increased",
+    "service": "checkout",
+    "symptoms": [
+      "latency"
+    ],
+    "window_minutes": 60,
+    "observations": [
+      {
+        "id": "F1",
+        "kind": "health",
+        "statement": "checkout health is degraded: p95 2100 ms, 5xx ratio 0.0%, version 1.8.2",
+        "source": "get_service_health",
+        "at": null,
+        "signals": [
+          "symptom_latency"
+        ],
+        "data": {
+          "health": "degraded",
+          "p95_latency_ms": 2100,
+          "error_rate": 0.0,
+          "version": "1.8.2",
+          "reasons": []
+        }
+      },
+      {
+        "id": "F2",
+        "kind": "dependency",
+        "statement": "all dependencies with data are healthy (payments, users)",
+        "source": "get_service_health",
+        "at": null,
+        "signals": [
+          "dependencies_healthy"
+        ],
+        "data": {
+          "dependencies": [
+            "users",
+            "payments"
+          ]
+        }
+      },
+      {
+        "id": "F3",
+        "kind": "alert",
+        "statement": "alert HighLatencyP95 (firing) for checkout: checkout HighLatencyP95",
+        "source": "get_incident_events",
+        "at": "2026-11-08T11:55:00Z",
+        "signals": [
+          "alert_firing"
+        ],
+        "data": {}
+      },
+      {
+        "id": "F4",
+        "kind": "deployment",
+        "statement": "checkout version 1.8.2 was first observed at 11:48:00 UTC (replacing 1.8.1)",
+        "source": "get_recent_deployments",
+        "at": "2026-11-08T11:48:00Z",
+        "signals": [
+          "deploy_recent"
+        ],
+        "data": {
+          "version": "1.8.2",
+          "previous_version": "1.8.1",
+          "status": "active"
+        }
+      },
+      {
+        "id": "F5",
+        "kind": "metric",
+        "statement": "checkout p95 latency rose from 210 ms to 2100 ms, starting at 11:50:00 UTC",
+        "source": "query_metrics",
+        "at": "2026-11-08T11:50:00Z",
+        "signals": [
+          "latency_step",
+          "symptom_latency"
+        ],
+        "data": {
+          "baseline_s": 0.21,
+          "current_s": 2.1
+        }
+      },
+      {
+        "id": "F6",
+        "kind": "log",
+        "statement": "40 slow_query_detected warnings in checkout logs (select_cart_items (20), insert_order (20), typical 900 ms)",
+        "source": "get_recent_logs",
+        "at": null,
+        "signals": [
+          "db_slow_logs"
+        ],
+        "data": {
+          "count": 40,
+          "operations": {
+            "select_cart_items": 20,
+            "insert_order": 20
+          },
+          "sample_request_ids": [
+            "req-slow-0",
+            "req-slow-1",
+            "req-slow-2"
+          ]
+        }
+      },
+      {
+        "id": "F7",
+        "kind": "log",
+        "statement": "25 request_slow warnings (requests over 1 s) in checkout logs",
+        "source": "get_recent_logs",
+        "at": null,
+        "signals": [
+          "symptom_latency"
+        ],
+        "data": {
+          "count": 25
+        }
+      },
+      {
+        "id": "F8",
+        "kind": "metric",
+        "statement": "checkout database query p95 rose from 40 ms to 950 ms, starting at 11:50:00 UTC",
+        "source": "query_metrics",
+        "at": "2026-11-08T11:50:00Z",
+        "signals": [
+          "db_latency_rise"
+        ],
+        "data": {
+          "baseline_s": 0.04,
+          "current_s": 0.95
+        }
+      }
+    ],
+    "evidence": [
+      {
+        "id": "K1",
+        "citation": "postmortems/2026-09-checkout-slow-query.md#chunk-0",
+        "title": "Postmortem: checkout latency from a cart query regression",
+        "section": "Root cause",
+        "score": 0.81,
+        "excerpt": "Release 1.7.4 changed the cart query; slow_query_detected warnings appeared. Rolling back restored latency.",
+        "flags": []
+      },
+      {
+        "id": "K2",
+        "citation": "troubleshooting/database-troubleshooting.md#chunk-1",
+        "title": "Database troubleshooting guide",
+        "section": "Is it the database or the service?",
+        "score": 0.77,
+        "excerpt": "If query latency and request latency rise together, the database path is the bottleneck. A slow query after a release suggests a query regression.",
+        "flags": []
+      },
+      {
+        "id": "K3",
+        "citation": "procedures/deployment-rollback.md#chunk-2",
+        "title": "Deployment rollback procedure",
+        "section": "Rolling back",
+        "score": 0.74,
+        "excerpt": "Roll back when an incident starts shortly after a release. Redeploy the previous image tag.",
+        "flags": []
+      },
+      {
+        "id": "K4",
+        "citation": "architecture/service-dependencies.md#chunk-3",
+        "title": "Service dependency map",
+        "section": "Reading the map",
+        "score": 0.72,
+        "excerpt": "A problem in users or payments surfaces as checkout errors (502) or latency because checkout calls both on every request; dependency errors cascade.",
+        "flags": []
+      }
+    ],
+    "hypotheses": [
+      {
+        "id": "H1",
+        "cause": "deployment_db_regression",
+        "statement": "Release 1.8.2 of checkout introduced a database query regression",
+        "supporting": [
+          "F1",
+          "F3",
+          "F5",
+          "F7",
+          "F8",
+          "F6",
+          "F4",
+          "K1",
+          "K2",
+          "K3"
+        ],
+        "contradicting": [],
+        "contradictions": [],
+        "confidence": {
+          "base": 0.1,
+          "temporal": 0.25,
+          "metric": 0.25,
+          "log": 0.2,
+          "deployment": 0.1,
+          "knowledge": 0.1,
+          "contradictions": -0.0,
+          "coverage_factor": 1.0,
+          "value": 0.95
+        },
+        "status": "supported"
+      },
+      {
+        "id": "H3",
+        "cause": "database_degradation",
+        "statement": "Database queries of checkout became slow",
+        "supporting": [
+          "F1",
+          "F3",
+          "F5",
+          "F7",
+          "F8",
+          "F6",
+          "K1",
+          "K2"
+        ],
+        "contradicting": [],
+        "contradictions": [],
+        "confidence": {
+          "base": 0.1,
+          "temporal": 0.25,
+          "metric": 0.25,
+          "log": 0.2,
+          "deployment": 0.0,
+          "knowledge": 0.1,
+          "contradictions": -0.0,
+          "coverage_factor": 1.0,
+          "value": 0.9
+        },
+        "status": "supported"
+      },
+      {
+        "id": "H2",
+        "cause": "deployment_regression",
+        "statement": "Release 1.8.2 of checkout introduced a regression",
+        "supporting": [
+          "F1",
+          "F3",
+          "F5",
+          "F7",
+          "F4",
+          "K1",
+          "K2",
+          "K3"
+        ],
+        "contradicting": [],
+        "contradictions": [],
+        "confidence": {
+          "base": 0.1,
+          "temporal": 0.25,
+          "metric": 0.25,
+          "log": 0.0,
+          "deployment": 0.1,
+          "knowledge": 0.1,
+          "contradictions": -0.0,
+          "coverage_factor": 1.0,
+          "value": 0.8
+        },
+        "status": "supported"
+      }
+    ],
+    "conclusion": "Most likely root cause: Release 1.8.2 of checkout introduced a database query regression (confidence 95%, heuristic). Supported by F1, F3, F5, F7, F8, F6, F4, K1, K2, K3.",
+    "root_cause": "deployment_db_regression",
+    "confidence": 0.95,
+    "confidence_breakdown": {
+      "base": 0.1,
+      "temporal": 0.25,
+      "metric": 0.25,
+      "log": 0.2,
+      "deployment": 0.1,
+      "knowledge": 0.1,
+      "contradictions": -0.0,
+      "coverage_factor": 1.0,
+      "value": 0.95
+    },
+    "recommendations": [
+      {
+        "action": "Roll back checkout from 1.8.2 to 1.8.1",
+        "rationale": "The symptom started shortly after this release and the evidence points at it.",
+        "requires_human_approval": true,
+        "references": [
+          "procedures/deployment-rollback.md#chunk-2"
+        ]
+      },
+      {
+        "action": "Capture the slow queries and their plans for the postmortem",
+        "rationale": "Needed to fix the regression before redeploying.",
+        "requires_human_approval": false,
+        "references": [
+          "postmortems/2026-09-checkout-slow-query.md#chunk-0",
+          "troubleshooting/database-troubleshooting.md#chunk-1"
+        ]
+      }
+    ],
+    "missing_evidence": [],
+    "tool_calls": [
+      {
+        "tool": "get_service_health",
+        "arguments": {
+          "service": "checkout"
+        },
+        "status": "ok",
+        "duration_ms": 0.0,
+        "error": null,
+        "result_summary": "health=degraded, p95=2100 ms",
+        "result": {
+          "status": "ok",
+          "errors": [],
+          "service": "checkout",
+          "health": "degraded",
+          "p95_latency_ms": 2100,
+          "error_rate": 0.0,
+          "request_rate": 4.0,
+          "version": "1.8.2",
+          "targets_up": 1,
+          "reasons": [],
+          "dependency_status": [
+            {
+              "service": "users",
+              "status": "healthy",
+              "error_rate": 0.0,
+              "p95_latency_ms": 80.0
+            },
+            {
+              "service": "payments",
+              "status": "healthy",
+              "error_rate": 0.0,
+              "p95_latency_ms": 80.0
+            }
+          ]
+        }
+      },
+      {
+        "tool": "get_incident_events",
+        "arguments": {
+          "service": "checkout",
+          "minutes": 60
+        },
+        "status": "ok",
+        "duration_ms": 0.0,
+        "error": null,
+        "result_summary": "1 events",
+        "result": {
+          "status": "ok",
+          "errors": [],
+          "service": "checkout",
+          "events": [
+            {
+              "timestamp": "2026-11-08T11:55:00+00:00",
+              "kind": "alert",
+              "summary": "HighLatencyP95 (firing)",
+              "details": {
+                "state": "firing",
+                "summary": "checkout HighLatencyP95"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "tool": "get_recent_deployments",
+        "arguments": {
+          "service": "checkout",
+          "lookback_hours": 2
+        },
+        "status": "ok",
+        "duration_ms": 0.0,
+        "error": null,
+        "result_summary": "2 versions",
+        "result": {
+          "status": "ok",
+          "errors": [],
+          "service": "checkout",
+          "deployments": [
+            {
+              "version": "1.8.1",
+              "deployment_time": "2026-11-08T10:00:00+00:00",
+              "last_seen": "2026-11-08T11:48:00+00:00",
+              "status": "superseded",
+              "deployed_before_window": true
+            },
+            {
+              "version": "1.8.2",
+              "deployment_time": "2026-11-08T11:48:00+00:00",
+              "last_seen": "2026-11-08T12:00:00+00:00",
+              "status": "active",
+              "deployed_before_window": false
+            }
+          ]
+        }
+      },
+      {
+        "tool": "get_service_dependencies",
+        "arguments": {
+          "service": "checkout"
+        },
+        "status": "ok",
+        "duration_ms": 0.0,
+        "error": null,
+        "result_summary": "2 dependencies",
+        "result": {
+          "status": "ok",
+          "errors": [],
+          "service": "checkout",
+          "known_service": true,
+          "dependencies": [
+            {
+              "service": "users",
+              "direction": "downstream",
+              "sources": [
+                "catalog"
+              ]
+            },
+            {
+              "service": "payments",
+              "direction": "downstream",
+              "sources": [
+                "catalog"
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "tool": "query_metrics",
+        "arguments": {
+          "query": "max(service:http_latency_seconds:p95_1m{service=\"checkout\"})",
+          "start_time": "now-60m"
+        },
+        "status": "ok",
+        "duration_ms": 0.3,
+        "error": null,
+        "result_summary": "1 series",
+        "result": {
+          "status": "ok",
+          "errors": [],
+          "series": [
+            {
+              "metric": {},
+              "points": [
+                {
+                  "timestamp": "2026-11-08T11:00:00+00:00",
+                  "value": 0.21
+                },
+                {
+                  "timestamp": "2026-11-08T11:01:00+00:00",
+                  "value": 0.21
+                },
+                {
+                  "timestamp": "2026-11-08T11:02:00+00:00",
+                  "value": 0.21
+                },
+                {
+                  "timestamp": "2026-11-08T11:03:00+00:00",
+                  "value": 0.21
+                },
+                {
+                  "timestamp": "2026-11-08T11:04:00+00:00",
+                  "value": 0.21
+                },
+                {
+                  "timestamp": "2026-11-08T11:05:00+00:00",
+                  "value": 0.21
+                },
+                {
+                  "timestamp": "2026-11-08T11:06:00+00:00",
+                  "value": 0.21
+                },
+                {
+                  "timestamp": "2026-11-08T11:07:00+00:00",
+                  "value": 0.21
+                },
+                {
+                  "timestamp": "2026-11-08T11:08:00+00:00",
+                  "value": 0.21
+                },
+                {
+                  "timestamp": "2026-11-08T11:09:00+00:00",
+                  "value": 0.21
+                },
+                {
+                  "timestamp": "2026-11-08T11:10:00+00:00",
+                  "value": 0.21
+                },
+                {
+                  "timestamp": "2026-11-08T11:11:00+00:00",
+                  "value": 0.21
+                },
+                {
+                  "timestamp": "2026-11-08T11:12:00+00:00",
+                  "value": 0.21
+                },
+                {
+                  "timestamp": "2026-11-08T11:13:00+00:00",
+                  "value": 0.21
+                },
+                {
+                  "timestamp": "2026-11-08T11:14:00+00:00",
+                  "value": 0.21
+                },
+                {
+                  "timestamp": "2026-11-08T11:15:00+00:00",
+                  "value": 0.21
+                },
+                {
+                  "timestamp": "2026-11-08T11:16:00+00:00",
+                  "value": 0.21
+                },
+                {
+                  "timestamp": "2026-11-08T11:17:00+00:00",
+                  "value": 0.21
+                },
+                {
+                  "timestamp": "2026-11-08T11:18:00+00:00",
+                  "value": 0.21
+                },
+                {
+                  "timestamp": "2026-11-08T11:19:00+00:00",
+                  "value": 0.21
+                },
+                {
+                  "timestamp": "2026-11-08T11:20:00+00:00",
+                  "value": 0.21
+                },
+                {
+                  "timestamp": "2026-11-08T11:21:00+00:00",
+                  "value": 0.21
+                },
+                {
+                  "timestamp": "2026-11-08T11:22:00+00:00",
+                  "value": 0.21
+                },
+                {
+                  "timestamp": "2026-11-08T11:23:00+00:00",
+                  "value": 0.21
+                },
+                {
+                  "timestamp": "2026-11-08T11:24:00+00:00",
+                  "value": 0.21
+                },
+                {
+                  "timestamp": "2026-11-08T11:25:00+00:00",
+                  "value": 0.21
+                },
+                {
+                  "timestamp": "2026-11-08T11:26:00+00:00",
+                  "value": 0.21
+                },
+                {
+                  "timestamp": "2026-11-08T11:27:00+00:00",
+                  "value": 0.21
+                },
+                {
+                  "timestamp": "2026-11-08T11:28:00+00:00",
+                  "value": 0.21
+                },
+                {
+                  "timestamp": "2026-11-08T11:29:00+00:00",
+                  "value": 0.21
+                },
+                {
+                  "timestamp": "2026-11-08T11:30:00+00:00",
+                  "value": 0.21
+                },
+                {
+                  "timestamp": "2026-11-08T11:31:00+00:00",
+                  "value": 0.21
+                },
+                {
+                  "timestamp": "2026-11-08T11:32:00+00:00",
+                  "value": 0.21
+                },
+                {
+                  "timestamp": "2026-11-08T11:33:00+00:00",
+                  "value": 0.21
+                },
+                {
+                  "timestamp": "2026-11-08T11:34:00+00:00",
+                  "value": 0.21
+                },
+                {
+                  "timestamp": "2026-11-08T11:35:00+00:00",
+                  "value": 0.21
+                },
+                {
+                  "timestamp": "2026-11-08T11:36:00+00:00",
+                  "value": 0.21
+                },
+                {
+                  "timestamp": "2026-11-08T11:37:00+00:00",
+                  "value": 0.21
+                },
+                {
+                  "timestamp": "2026-11-08T11:38:00+00:00",
+                  "value": 0.21
+                },
+                {
+                  "timestamp": "2026-11-08T11:39:00+00:00",
+                  "value": 0.21
+                },
+                {
+                  "timestamp": "2026-11-08T11:40:00+00:00",
+                  "value": 0.21
+                },
+                {
+                  "timestamp": "2026-11-08T11:41:00+00:00",
+                  "value": 0.21
+                },
+                {
+                  "timestamp": "2026-11-08T11:42:00+00:00",
+                  "value": 0.21
+                },
+                {
+                  "timestamp": "2026-11-08T11:43:00+00:00",
+                  "value": 0.21
+                },
+                {
+                  "timestamp": "2026-11-08T11:44:00+00:00",
+                  "value": 0.21
+                },
+                {
+                  "timestamp": "2026-11-08T11:45:00+00:00",
+                  "value": 0.21
+                },
+                {
+                  "timestamp": "2026-11-08T11:46:00+00:00",
+                  "value": 0.21
+                },
+                {
+                  "timestamp": "2026-11-08T11:47:00+00:00",
+                  "value": 0.21
+                },
+                {
+                  "timestamp": "2026-11-08T11:48:00+00:00",
+                  "value": 0.21
+                },
+                {
+                  "timestamp": "2026-11-08T11:49:00+00:00",
+                  "value": 0.21
+                },
+                {
+                  "timestamp": "2026-11-08T11:50:00+00:00",
+                  "value": 2.1
+                },
+                {
+                  "timestamp": "2026-11-08T11:51:00+00:00",
+                  "value": 2.1
+                },
+                {
+                  "timestamp": "2026-11-08T11:52:00+00:00",
+                  "value": 2.1
+                },
+                {
+                  "timestamp": "2026-11-08T11:53:00+00:00",
+                  "value": 2.1
+                },
+                {
+                  "timestamp": "2026-11-08T11:54:00+00:00",
+                  "value": 2.1
+                },
+                {
+                  "timestamp": "2026-11-08T11:55:00+00:00",
+                  "value": 2.1
+                },
+                {
+                  "timestamp": "2026-11-08T11:56:00+00:00",
+                  "value": 2.1
+                },
+                {
+                  "timestamp": "2026-11-08T11:57:00+00:00",
+                  "value": 2.1
+                },
+                {
+                  "timestamp": "2026-11-08T11:58:00+00:00",
+                  "value": 2.1
+                },
+                {
+                  "timestamp": "2026-11-08T11:59:00+00:00",
+                  "value": 2.1
+                },
+                {
+                  "timestamp": "2026-11-08T12:00:00+00:00",
+                  "value": 2.1
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "tool": "get_recent_logs",
+        "arguments": {
+          "service": "checkout",
+          "minutes": 60,
+          "severity": "warning",
+          "limit": 200
+        },
+        "status": "ok",
+        "duration_ms": 0.7,
+        "error": null,
+        "result_summary": "65 log entries",
+        "result": {
+          "status": "ok",
+          "errors": [],
+          "service": "checkout",
+          "entries": [
+            {
+              "timestamp": "2026-11-08T12:00:00+00:00",
+              "level": "warning",
+              "message": "slow_query_detected",
+              "metadata": {
+                "request_id": "req-slow-0",
+                "operation": "select_cart_items",
+                "query_time_ms": 900
+              }
+            },
+            {
+              "timestamp": "2026-11-08T11:59:50+00:00",
+              "level": "warning",
+              "message": "slow_query_detected",
+              "metadata": {
+                "request_id": "req-slow-1",
+                "operation": "insert_order",
+                "query_time_ms": 900
+              }
+            },
+            {
+              "timestamp": "2026-11-08T11:59:40+00:00",
+              "level": "warning",
+              "message": "slow_query_detected",
+              "metadata": {
+                "request_id": "req-slow-2",
+                "operation": "select_cart_items",
+                "query_time_ms": 900
+              }
+            },
+            {
+              "timestamp": "2026-11-08T11:59:30+00:00",
+              "level": "warning",
+              "message": "slow_query_detected",
+              "metadata": {
+                "request_id": "req-slow-3",
+                "operation": "insert_order",
+                "query_time_ms": 900
+              }
+            },
+            {
+              "timestamp": "2026-11-08T11:59:20+00:00",
+              "level": "warning",
+              "message": "slow_query_detected",
+              "metadata": {
+                "request_id": "req-slow-4",
+                "operation": "select_cart_items",
+                "query_time_ms": 900
+              }
+            },
+            {
+              "timestamp": "2026-11-08T11:59:10+00:00",
+              "level": "warning",
+              "message": "slow_query_detected",
+              "metadata": {
+                "request_id": "req-slow-5",
+                "operation": "insert_order",
+                "query_time_ms": 900
+              }
+            },
+            {
+              "timestamp": "2026-11-08T11:59:00+00:00",
+              "level": "warning",
+              "message": "slow_query_detected",
+              "metadata": {
+                "request_id": "req-slow-6",
+                "operation": "select_cart_items",
+                "query_time_ms": 900
+              }
+            },
+            {
+              "timestamp": "2026-11-08T11:58:50+00:00",
+              "level": "warning",
+              "message": "slow_query_detected",
+              "metadata": {
+                "request_id": "req-slow-7",
+                "operation": "insert_order",
+                "query_time_ms": 900
+              }
+            },
+            {
+              "timestamp": "2026-11-08T11:58:40+00:00",
+              "level": "warning",
+              "message": "slow_query_detected",
+              "metadata": {
+                "request_id": "req-slow-8",
+                "operation": "select_cart_items",
+                "query_time_ms": 900
+              }
+            },
+            {
+              "timestamp": "2026-11-08T11:58:30+00:00",
+              "level": "warning",
+              "message": "slow_query_detected",
+              "metadata": {
+                "request_id": "req-slow-9",
+                "operation": "insert_order",
+                "query_time_ms": 900
+              }
+            },
+            {
+              "timestamp": "2026-11-08T11:58:20+00:00",
+              "level": "warning",
+              "message": "slow_query_detected",
+              "metadata": {
+                "request_id": "req-slow-10",
+                "operation": "select_cart_items",
+                "query_time_ms": 900
+              }
+            },
+            {
+              "timestamp": "2026-11-08T11:58:10+00:00",
+              "level": "warning",
+              "message": "slow_query_detected",
+              "metadata": {
+                "request_id": "req-slow-11",
+                "operation": "insert_order",
+                "query_time_ms": 900
+              }
+            },
+            {
+              "timestamp": "2026-11-08T11:58:00+00:00",
+              "level": "warning",
+              "message": "slow_query_detected",
+              "metadata": {
+                "request_id": "req-slow-12",
+                "operation": "select_cart_items",
+                "query_time_ms": 900
+              }
+            },
+            {
+              "timestamp": "2026-11-08T11:57:50+00:00",
+              "level": "warning",
+              "message": "slow_query_detected",
+              "metadata": {
+                "request_id": "req-slow-13",
+                "operation": "insert_order",
+                "query_time_ms": 900
+              }
+            },
+            {
+              "timestamp": "2026-11-08T11:57:40+00:00",
+              "level": "warning",
+              "message": "slow_query_detected",
+              "metadata": {
+                "request_id": "req-slow-14",
+                "operation": "select_cart_items",
+                "query_time_ms": 900
+              }
+            },
+            {
+              "timestamp": "2026-11-08T11:57:30+00:00",
+              "level": "warning",
+              "message": "slow_query_detected",
+              "metadata": {
+                "request_id": "req-slow-15",
+                "operation": "insert_order",
+                "query_time_ms": 900
+              }
+            },
+            {
+              "timestamp": "2026-11-08T11:57:20+00:00",
+              "level": "warning",
+              "message": "slow_query_detected",
+              "metadata": {
+                "request_id": "req-slow-16",
+                "operation": "select_cart_items",
+                "query_time_ms": 900
+              }
+            },
+            {
+              "timestamp": "2026-11-08T11:57:10+00:00",
+              "level": "warning",
+              "message": "slow_query_detected",
+              "metadata": {
+                "request_id": "req-slow-17",
+                "operation": "insert_order",
+                "query_time_ms": 900
+              }
+            },
+            {
+              "timestamp": "2026-11-08T11:57:00+00:00",
+              "level": "warning",
+              "message": "slow_query_detected",
+              "metadata": {
+                "request_id": "req-slow-18",
+                "operation": "select_cart_items",
+                "query_time_ms": 900
+              }
+            },
+            {
+              "timestamp": "2026-11-08T11:56:50+00:00",
+              "level": "warning",
+              "message": "slow_query_detected",
+              "metadata": {
+                "request_id": "req-slow-19",
+                "operation": "insert_order",
+                "query_time_ms": 900
+              }
+            }
+          ],
+          "entries_truncated": 45
+        }
+      },
+      {
+        "tool": "query_metrics",
+        "arguments": {
+          "query": "max(service_operation:db_query_seconds:p95_1m{service=\"checkout\"})",
+          "start_time": "now-60m"
+        },
+        "status": "ok",
+        "duration_ms": 0.3,
+        "error": null,
+        "result_summary": "1 series",
+        "result": {
+          "status": "ok",
+          "errors": [],
+          "series": [
+            {
+              "metric": {},
+              "points": [
+                {
+                  "timestamp": "2026-11-08T11:00:00+00:00",
+                  "value": 0.04
+                },
+                {
+                  "timestamp": "2026-11-08T11:01:00+00:00",
+                  "value": 0.04
+                },
+                {
+                  "timestamp": "2026-11-08T11:02:00+00:00",
+                  "value": 0.04
+                },
+                {
+                  "timestamp": "2026-11-08T11:03:00+00:00",
+                  "value": 0.04
+                },
+                {
+                  "timestamp": "2026-11-08T11:04:00+00:00",
+                  "value": 0.04
+                },
+                {
+                  "timestamp": "2026-11-08T11:05:00+00:00",
+                  "value": 0.04
+                },
+                {
+                  "timestamp": "2026-11-08T11:06:00+00:00",
+                  "value": 0.04
+                },
+                {
+                  "timestamp": "2026-11-08T11:07:00+00:00",
+                  "value": 0.04
+                },
+                {
+                  "timestamp": "2026-11-08T11:08:00+00:00",
+                  "value": 0.04
+                },
+                {
+                  "timestamp": "2026-11-08T11:09:00+00:00",
+                  "value": 0.04
+                },
+                {
+                  "timestamp": "2026-11-08T11:10:00+00:00",
+                  "value": 0.04
+                },
+                {
+                  "timestamp": "2026-11-08T11:11:00+00:00",
+                  "value": 0.04
+                },
+                {
+                  "timestamp": "2026-11-08T11:12:00+00:00",
+                  "value": 0.04
+                },
+                {
+                  "timestamp": "2026-11-08T11:13:00+00:00",
+                  "value": 0.04
+                },
+                {
+                  "timestamp": "2026-11-08T11:14:00+00:00",
+                  "value": 0.04
+                },
+                {
+                  "timestamp": "2026-11-08T11:15:00+00:00",
+                  "value": 0.04
+                },
+                {
+                  "timestamp": "2026-11-08T11:16:00+00:00",
+                  "value": 0.04
+                },
+                {
+                  "timestamp": "2026-11-08T11:17:00+00:00",
+                  "value": 0.04
+                },
+                {
+                  "timestamp": "2026-11-08T11:18:00+00:00",
+                  "value": 0.04
+                },
+                {
+                  "timestamp": "2026-11-08T11:19:00+00:00",
+                  "value": 0.04
+                },
+                {
+                  "timestamp": "2026-11-08T11:20:00+00:00",
+                  "value": 0.04
+                },
+                {
+                  "timestamp": "2026-11-08T11:21:00+00:00",
+                  "value": 0.04
+                },
+                {
+                  "timestamp": "2026-11-08T11:22:00+00:00",
+                  "value": 0.04
+                },
+                {
+                  "timestamp": "2026-11-08T11:23:00+00:00",
+                  "value": 0.04
+                },
+                {
+                  "timestamp": "2026-11-08T11:24:00+00:00",
+                  "value": 0.04
+                },
+                {
+                  "timestamp": "2026-11-08T11:25:00+00:00",
+                  "value": 0.04
+                },
+                {
+                  "timestamp": "2026-11-08T11:26:00+00:00",
+                  "value": 0.04
+                },
+                {
+                  "timestamp": "2026-11-08T11:27:00+00:00",
+                  "value": 0.04
+                },
+                {
+                  "timestamp": "2026-11-08T11:28:00+00:00",
+                  "value": 0.04
+                },
+                {
+                  "timestamp": "2026-11-08T11:29:00+00:00",
+                  "value": 0.04
+                },
+                {
+                  "timestamp": "2026-11-08T11:30:00+00:00",
+                  "value": 0.04
+                },
+                {
+                  "timestamp": "2026-11-08T11:31:00+00:00",
+                  "value": 0.04
+                },
+                {
+                  "timestamp": "2026-11-08T11:32:00+00:00",
+                  "value": 0.04
+                },
+                {
+                  "timestamp": "2026-11-08T11:33:00+00:00",
+                  "value": 0.04
+                },
+                {
+                  "timestamp": "2026-11-08T11:34:00+00:00",
+                  "value": 0.04
+                },
+                {
+                  "timestamp": "2026-11-08T11:35:00+00:00",
+                  "value": 0.04
+                },
+                {
+                  "timestamp": "2026-11-08T11:36:00+00:00",
+                  "value": 0.04
+                },
+                {
+                  "timestamp": "2026-11-08T11:37:00+00:00",
+                  "value": 0.04
+                },
+                {
+                  "timestamp": "2026-11-08T11:38:00+00:00",
+                  "value": 0.04
+                },
+                {
+                  "timestamp": "2026-11-08T11:39:00+00:00",
+                  "value": 0.04
+                },
+                {
+                  "timestamp": "2026-11-08T11:40:00+00:00",
+                  "value": 0.04
+                },
+                {
+                  "timestamp": "2026-11-08T11:41:00+00:00",
+                  "value": 0.04
+                },
+                {
+                  "timestamp": "2026-11-08T11:42:00+00:00",
+                  "value": 0.04
+                },
+                {
+                  "timestamp": "2026-11-08T11:43:00+00:00",
+                  "value": 0.04
+                },
+                {
+                  "timestamp": "2026-11-08T11:44:00+00:00",
+                  "value": 0.04
+                },
+                {
+                  "timestamp": "2026-11-08T11:45:00+00:00",
+                  "value": 0.04
+                },
+                {
+                  "timestamp": "2026-11-08T11:46:00+00:00",
+                  "value": 0.04
+                },
+                {
+                  "timestamp": "2026-11-08T11:47:00+00:00",
+                  "value": 0.04
+                },
+                {
+                  "timestamp": "2026-11-08T11:48:00+00:00",
+                  "value": 0.04
+                },
+                {
+                  "timestamp": "2026-11-08T11:49:00+00:00",
+                  "value": 0.04
+                },
+                {
+                  "timestamp": "2026-11-08T11:50:00+00:00",
+                  "value": 0.95
+                },
+                {
+                  "timestamp": "2026-11-08T11:51:00+00:00",
+                  "value": 0.95
+                },
+                {
+                  "timestamp": "2026-11-08T11:52:00+00:00",
+                  "value": 0.95
+                },
+                {
+                  "timestamp": "2026-11-08T11:53:00+00:00",
+                  "value": 0.95
+                },
+                {
+                  "timestamp": "2026-11-08T11:54:00+00:00",
+                  "value": 0.95
+                },
+                {
+                  "timestamp": "2026-11-08T11:55:00+00:00",
+                  "value": 0.95
+                },
+                {
+                  "timestamp": "2026-11-08T11:56:00+00:00",
+                  "value": 0.95
+                },
+                {
+                  "timestamp": "2026-11-08T11:57:00+00:00",
+                  "value": 0.95
+                },
+                {
+                  "timestamp": "2026-11-08T11:58:00+00:00",
+                  "value": 0.95
+                },
+                {
+                  "timestamp": "2026-11-08T11:59:00+00:00",
+                  "value": 0.95
+                },
+                {
+                  "timestamp": "2026-11-08T12:00:00+00:00",
+                  "value": 0.95
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "trace": [
+      {
+        "node": "planner",
+        "duration_ms": 0.2,
+        "summary": "service=checkout, symptoms=['latency'], 7 tool calls planned"
+      },
+      {
+        "node": "rag",
+        "duration_ms": 1.0,
+        "summary": "4 knowledge passages retrieved"
+      },
+      {
+        "node": "mcp",
+        "duration_ms": 3.0,
+        "summary": "7 tool calls, 8 observations"
+      },
+      {
+        "node": "hypothesis",
+        "duration_ms": 0.1,
+        "summary": "3 hypotheses: deployment_db_regression, deployment_regression, database_degradation"
+      },
+      {
+        "node": "validator",
+        "duration_ms": 0.4,
+        "summary": "round 1: best=deployment_db_regression (0.95), sufficient -> synthesize"
+      },
+      {
+        "node": "synthesizer",
+        "duration_ms": 0.1,
+        "summary": "Most likely root cause: Release 1.8.2 of checkout introduced a database query regression (confidence 95%, heuristic). Supported by F1, F3, F5, F7, F8, F6, F4, K"
+      }
+    ],
+    "iterations": 1,
+    "llm": {
+      "provider": "none",
+      "status": "not_used"
+    },
+    "completed": true
+  }
+}
