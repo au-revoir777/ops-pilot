@@ -47,8 +47,18 @@
 | `app/services/investigation.py` | Investigation lifecycle, timeline events, incident coupling |
 | `app/services/transactions.py` | `transaction()` commit/rollback boundary |
 | `app/services/exceptions.py` | Domain exceptions with error codes and HTTP statuses |
+| `app/rag/documents.py` | Knowledge-base loader + cleaner (front matter validation) |
+| `app/rag/chunking.py` | Heading-aware Markdown chunker with overlap |
+| `app/rag/embeddings.py` | Embedding providers: local bge-small (default), OpenAI, hashing (tests) |
+| `app/rag/ingest.py` | Idempotent ingestion service + `python -m app.rag.ingest` CLI |
+| `app/rag/retrieval.py` | Similarity retrieval, ranking, provenance, fenced LLM context |
+| `app/rag/safety.py` | Prompt-injection flagging for retrieved text |
+| `app/rag/evaluate.py` | Retrieval quality metrics (hit@k, MRR, threshold checks) |
+| `app/routes/knowledge.py` | `POST /api/knowledge/search`, `GET /api/knowledge/documents` |
+| `app/db/models/knowledge.py` | `Document`, `DocumentChunk` (vector(384), HNSW cosine) |
+| `app/db/repositories/knowledge.py` | Document/chunk persistence and filtered vector search |
+| `app/db/migrations/versions/0002_knowledge_base.py` | Knowledge-base tables and indexes |
 | `app/agents/` | *(Phase 6)* LangGraph agent: graph, state, planner, etc. |
-| `app/rag/` | *(Phase 4)* RAG pipeline: ingest, chunking, embeddings, retriever |
 
 ### Tests
 
@@ -58,6 +68,9 @@
 | `tests/unit/test_config.py` | Settings defaults, env parsing, environments, test-DB guard, secret masking |
 | `tests/unit/test_health.py` | Probes, request IDs, structured/non-leaking errors, validation (no DB) |
 | `tests/unit/test_metrics.py` | /metrics, route-template labels, domain counters, log context |
+| `tests/unit/test_rag.py` | Loader, cleaner, chunker, embedders, ranking, prompt-injection defence, search API errors |
+| `tests/integration/test_rag_pipeline.py` | Ingest → pgvector → retrieval, filters, idempotency, pruning, search API |
+| `tests/integration/test_rag_quality.py` | `pytest -m evaluation`: retrieval quality with the real model |
 | `tests/unit/test_services.py` | State machines, transaction commit/rollback with mocked repositories |
 | `tests/integration/conftest.py` | Real Postgres fixtures: Alembic to head, savepoint-rollback isolation |
 | `tests/integration/test_migrations.py` | Upgrade from empty, downgrade/re-upgrade, models == migrations |
@@ -139,10 +152,19 @@ One package, one image, three services (D-020). Compose picks the service via th
 
 ---
 
-## `docs/` — Knowledge Base for RAG
+## `docs/knowledge/` — RAG Knowledge Base
 
-| Directory | Purpose |
-|-----------|---------|
+Markdown with YAML front matter (`title`, `doc_type`, `services`, extras kept as metadata).
+
+| Directory | Contents |
+|-----------|----------|
+| `runbooks/` | Checkout and payments on-call runbooks |
+| `architecture/` | Checkout and payments architecture, service dependency map |
+| `troubleshooting/` | Database, latency and Redis troubleshooting guides |
+| `procedures/` | Deployment rollback procedure |
+| `postmortems/` | Simulated checkout slow-query postmortem |
+
+-----------|---------|
 | `runbooks/` | *(Phase 4)* Operational runbooks |
 | `postmortems/` | *(Phase 4)* Incident postmortems |
 | `architecture/` | *(Phase 4)* Architecture documentation |
@@ -158,9 +180,9 @@ One package, one image, three services (D-020). Compose picks the service via th
 | `observability/test_add_monitored_project.py` | Unit: onboarding script output and validation |
 | `system/test_observability_stack.py` | System (`pytest -m system`, needs the stack): targets up, rules loaded, Grafana, cross-service request trace in Loki, latency injection visible |
 | `evaluation/` | *(Phase 10)* Agent evaluation test cases |
-| `fixtures/` | *(Phase 10)* Shared test data |
+| `fixtures/rag_eval.yml` | Labelled retrieval questions (relevant + off-topic) |
 
 -----------|---------|
 | `system/` | *(Phase 10)* End-to-end system tests |
 | `evaluation/` | *(Phase 10)* Agent evaluation test cases |
-| `fixtures/` | *(Phase 10)* Shared test data |
+| `fixtures/rag_eval.yml` | Labelled retrieval questions (relevant + off-topic) |

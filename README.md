@@ -177,6 +177,26 @@ Dashboards are generated: edit `observability/grafana/build_dashboards.py`,
 then run it. Ports are configurable with `GRAFANA_PORT`, `PROMETHEUS_PORT`,
 `LOKI_PORT` and `API_PORT`.
 
+## Knowledge base (RAG)
+
+Runbooks, architecture notes, troubleshooting guides, a rollback procedure and a
+postmortem live in `docs/knowledge/` as Markdown with YAML front matter. They are
+chunked, embedded locally with `BAAI/bge-small-en-v1.5` (no API key) and stored
+in PostgreSQL/pgvector.
+
+```bash
+make ingest          # or: docker compose exec api python -m app.rag.ingest
+make rag-eval        # hit@1 / hit@5 / MRR on tests/fixtures/rag_eval.yml
+curl -s -X POST localhost:8000/api/knowledge/search -H 'content-type: application/json' \
+  -d '{"query": "Why did checkout latency increase?", "top_k": 3}'
+```
+
+Ingestion is idempotent: unchanged files are skipped, edited files are re-embedded,
+and deleted files are removed. Every result carries its source, section, chunk and
+score. Retrieved text is treated as untrusted data, and instruction-like
+passages are flagged. To add a document, drop a Markdown file into the right
+folder and re-run the ingest.
+
 ## Testing
 
 ```bash
@@ -186,6 +206,7 @@ make test-integration  # real PostgreSQL: migrations, repositories, API
 make test-db-down
 make test              # unit + integration (system/evaluation excluded)
 make test-system       # needs the running stack (see Observability)
+pytest -m evaluation   # retrieval quality with the real embedding model
 make lint              # Ruff lint + format check
 ```
 
@@ -201,7 +222,7 @@ releases, so tests never leak state into each other.
 - [x] Phase 1: Database & Core Backend
 - [x] Phase 2: Demo Workloads
 - [x] Phase 3: Observability
-- [ ] Phase 4: RAG Pipeline
+- [x] Phase 4: RAG Pipeline
 - [ ] Phase 5: MCP Server
 - [ ] Phase 6: Agent
 - [ ] Phase 7: Investigation API

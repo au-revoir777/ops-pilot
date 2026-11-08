@@ -2,7 +2,7 @@
 # OpsPilot â€” Makefile
 # =============================================================================
 .PHONY: help setup dev up down build test test-unit test-integration test-system \
-        test-evaluation test-db-up test-db-down migrate lint scan ingest incident traffic cloud-up cloud-down clean
+        test-evaluation test-db-up test-db-down migrate lint scan ingest ingest-docker rag-eval incident traffic cloud-up cloud-down clean
 
 COMPOSE := docker compose
 PYTHON  := python
@@ -85,8 +85,14 @@ scan: ## Security scan Docker images with Trivy
 # ---------------------------------------------------------------------------
 # RAG
 # ---------------------------------------------------------------------------
-ingest: ## Ingest documents into RAG knowledge base
-	$(PYTHON) -m app.rag.ingest
+ingest: ## Ingest docs/knowledge into pgvector (uses DATABASE_URL; idempotent)
+	cd apps/api && $(PYTHON) -m app.rag.ingest --path ../../docs/knowledge
+
+ingest-docker: ## Ingest the knowledge base from inside the running API container
+	$(COMPOSE) exec api python -m app.rag.ingest
+
+rag-eval: ## Measure retrieval quality (hit@k, MRR) against tests/fixtures/rag_eval.yml
+	cd apps/api && $(PYTHON) -m app.rag.evaluate --dataset ../../tests/fixtures/rag_eval.yml
 
 # ---------------------------------------------------------------------------
 # Incident Lab

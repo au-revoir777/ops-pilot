@@ -64,6 +64,14 @@ TOOL_CALL_DURATION = Histogram(
 RAG_RETRIEVAL_DURATION = Histogram(
     "opspilot_rag_retrieval_duration_seconds", "RAG retrieval latency", buckets=LATENCY_BUCKETS
 )
+RAG_RETRIEVALS = Counter(
+    "opspilot_rag_retrievals_total", "RAG retrievals by outcome (hit, empty, error)", ["outcome"]
+)
+RAG_DOCUMENTS_INGESTED = Counter(
+    "opspilot_rag_documents_ingested_total",
+    "Knowledge-base documents processed by ingestion",
+    ["outcome"],
+)
 AGENT_EXECUTION_DURATION = Histogram(
     "opspilot_agent_execution_duration_seconds",
     "End-to-end agent run latency",

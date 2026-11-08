@@ -1,0 +1,41 @@
+# Retrieval evaluation set: question -> the knowledge-base document that should
+# answer it. Used by `python -m app.rag.evaluate` (metrics: hit@1, hit@k, MRR)
+# and, for off-topic questions, to check that the similarity threshold returns
+# nothing rather than irrelevant context.
+relevant:
+  - question: Why did checkout latency increase after the last deploy?
+    expected: runbooks/checkout-service.md
+  - question: What should on-call do when HighLatencyP95 fires for checkout?
+    expected: runbooks/checkout-service.md
+  - question: Checkout returns 502 DEPENDENCY_ERROR, what does that mean?
+    expected: architecture/checkout-architecture.md
+  - question: What calls does checkout make on every request and in what order?
+    expected: architecture/checkout-architecture.md
+  - question: Why are payments declined with HTTP 402?
+    expected: architecture/payments-architecture.md
+  - question: Payments is returning 5xx errors, how do I investigate?
+    expected: runbooks/payments-service.md
+  - question: How do I tell whether slowness is caused by the database or the service?
+    expected: troubleshooting/database-troubleshooting.md
+  - question: slow_query_detected warnings appeared for select_cart_items
+    expected: troubleshooting/database-troubleshooting.md
+  - question: p95 latency stepped up suddenly, how do I characterise the change?
+    expected: troubleshooting/latency-troubleshooting.md
+  - question: How do I roll back a bad release safely?
+    expected: procedures/deployment-rollback.md
+  - question: What must I check before rolling back a deployment with a database migration?
+    expected: procedures/deployment-rollback.md
+  - question: Has a cart query regression caused checkout latency before?
+    expected: postmortems/2026-09-checkout-slow-query.md
+  - question: Which services does checkout depend on and what is the blast radius?
+    expected: architecture/service-dependencies.md
+  - question: Cache hit ratio dropped and Redis is evicting keys
+    expected: troubleshooting/redis-troubleshooting.md
+  - question: Does an outage in users affect payments?
+    expected: architecture/service-dependencies.md
+    services: [users]
+
+off_topic:
+  - What is the capital of France?
+  - Give me a recipe for banana bread
+  - Who won the football world cup in 2018?

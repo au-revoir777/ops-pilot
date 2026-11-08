@@ -290,3 +290,66 @@
   - Log shipping for external projects.
   - Registering them as workloads in the database.
   - Authenticated scraping (basic auth/TLS) for targets outside the local network.
+
+---
+
+## D-027: Local embeddings with BAAI/bge-small-en-v1.5 (384 dimensions)
+
+- **Date:** 2026-11-08 (Phase 4)
+- **Context:** D-016 deferred the embedding dimension until a model was chosen. No LLM/API key is configured, unit tests must not need a live model, and every environment must embed identically.
+- **Alternatives:**
+  - OpenAI `text-embedding-3-small`: needs a key, costs money and sends documents to a third party.
+  - sentence-transformers: pulls in PyTorch, which multiplies the image size.
+  - Larger bge or e5 models: better quality, but slower on CPU for a corpus this small.
+- **Decision:** `BAAI/bge-small-en-v1.5` through `fastembed` (ONNX Runtime, CPU), pinned with `fastembed>=0.7.4,<0.8`.
+  - Queries use bge's retrieval instruction prefix.
+  - Vectors are L2-normalised.
+  - The model is baked into the API image (`/opt/models`), so containers never download it at runtime.
+- **Alternative providers:**
+  - `EMBEDDING_PROVIDER=openai` uses `text-embedding-3-small` with `dimensions=384`, so the schema still fits.
+  - `EMBEDDING_PROVIDER=hashing` is a deterministic lexical embedder for tests and offline work only.
+  - Switching provider requires a full re-ingest. Each document records which `embedding_model` produced its vectors, and a model change triggers re-embedding automatically.
+- **Consequences:** The column is `vector(384)`. The API image is about 1.2 GB, mostly existing Python dependencies plus about 130 MB of model.
+
+---
+
+## D-028: RAG pipeline parameters and storage
+
+- **Date:** 2026-11-08 (Phase 4). These are actual implementation values (spec section 43).
+- **Sources:** Markdown with YAML front matter in `docs/knowledge/`, organised as `runbooks/`, `architecture/`, `troubleshooting/`, `procedures/` and `postmortems/`. The corpus is 10 documents producing 43 chunks.
+  - Malformed files are reported and never ingested.
+  - If a previously ingested file breaks, its last good version is kept.
+- **Cleaning:**
+  - normalise newlines
+  - strip HTML comments and control characters
+  - collapse runs of blank lines
+- **Chunking:**
+  - Heading-aware: sections at `#`/`##`/`###` carry a heading trail into each chunk.
+  - Paragraphs are packed up to 300 words with 40 words of overlap. Sizes are counted in words, not model tokens; a chunk is at most 340 words.
+  - The embedded text is "title > section" plus the content.
+- **Storage:**
+  - Tables: `documents` (source unique, doc_type, `services text[]` with a GIN index, content hash, metadata JSONB) and `document_chunks` (`vector(384)`, unique `(document_id, chunk_index)`).
+  - Index: HNSW (`m=16`, `ef_construction=64`) with `vector_cosine_ops`.
+  - Filtered queries use `hnsw.iterative_scan = relaxed_order` (pgvector 0.8), so filters don't starve the ANN result set.
+- **Retrieval:**
+  1. Cosine similarity over a candidate pool of 4×top_k, after the SQL metadata filters (doc type, service overlap).
+  2. Drop results below the threshold of 0.55.
+  3. Keep at most 2 chunks per document.
+  4. Return the top 5.
+  - An empty result means "no relevant knowledge". An unavailable model or database is reported as 503 `KNOWLEDGE_UNAVAILABLE`, never as empty.
+- **Provenance:** every result carries source, title, doc type, services, section, chunk index (`citation = source#chunk-N`) and score.
+- **Prompt injection (spec 31):** retrieved text is treated as data.
+  - Instruction-like passages are flagged `possible_prompt_injection`.
+  - Context for the LLM is fenced in `<reference>` blocks behind an "untrusted reference material" preamble, and a passage cannot close its fence early.
+  - The RAG layer has no path to tools or I/O; a test asserts that retrieving a hostile chunk executes nothing.
+- **Measured quality** (real model, 15 labelled questions in `tests/fixtures/rag_eval.yml`, `make rag-eval`):
+
+  | Metric | Value |
+  |---|---|
+  | hit@1 | 0.733 |
+  | hit@5 | 1.0 |
+  | MRR | 0.856 |
+  | Recall above the threshold | 1.0 |
+  | Off-topic questions returning nothing | 3 of 3 |
+
+  Observed scores: relevant questions top out around 0.70–0.82; off-topic questions around 0.40–0.43. The threshold sits between the two. The `pytest -m evaluation` test fails on regressions below hit@5 0.9 or MRR 0.75.

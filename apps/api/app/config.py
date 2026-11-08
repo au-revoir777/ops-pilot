@@ -29,6 +29,8 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
+        # An empty value (e.g. EMBEDDING_API_KEY= in .env) means "not set".
+        env_ignore_empty=True,
     )
 
     # --- General ---
@@ -58,11 +60,14 @@ class Settings(BaseSettings):
     llm_model: str = Field(default="gpt-4o", description="LLM model identifier")
     llm_api_key: str = Field(default="", description="LLM API key (from env/secrets)")
 
-    # --- Embeddings (consumed in Phase 4; not part of the Phase 1 schema) ---
-    embedding_model: str = Field(
-        default="text-embedding-3-small", description="Embedding model name"
-    )
-    embedding_dimensions: int = Field(default=1536, description="Embedding vector dimensions")
+    # --- Embeddings (DECISIONS D-027) ---
+    # local: BAAI/bge-small-en-v1.5 via fastembed (ONNX, no API key)
+    # openai: text-embedding-3-small requested at 384 dimensions
+    # hashing: deterministic lexical embedder for tests / offline use only
+    embedding_provider: Literal["local", "openai", "hashing"] = Field(default="local")
+    embedding_model: str = Field(default="BAAI/bge-small-en-v1.5")
+    embedding_api_key: SecretStr | None = Field(default=None, description="For provider=openai")
+    embedding_cache_dir: str | None = Field(default=None, description="Local model cache path")
 
     # --- MCP ---
     mcp_server_url: str = Field(default="http://localhost:8001", description="MCP server base URL")
@@ -84,11 +89,15 @@ class Settings(BaseSettings):
     agent_timeout_seconds: int = Field(default=120, description="Agent execution timeout")
 
     # --- RAG ---
-    rag_chunk_size: int = Field(default=512, description="RAG chunk size in tokens")
-    rag_chunk_overlap: int = Field(default=50, description="RAG chunk overlap in tokens")
-    rag_top_k: int = Field(default=5, description="Number of RAG results to retrieve")
+    rag_docs_path: str = Field(default="../../docs/knowledge", description="Knowledge base root")
+    # Sizes are in words (whitespace tokens), not model tokens: ~300 words stays
+    # under bge-small's 512-token input limit for English prose.
+    rag_chunk_size: int = Field(default=300, ge=50, le=1000, description="Max words per chunk")
+    rag_chunk_overlap: int = Field(default=40, ge=0, le=200, description="Words of overlap")
+    rag_top_k: int = Field(default=5, ge=1, le=20, description="Chunks returned per query")
+    rag_max_chunks_per_document: int = Field(default=2, ge=1, le=10)
     rag_similarity_threshold: float = Field(
-        default=0.7, description="Minimum cosine similarity for RAG results"
+        default=0.55, ge=0.0, le=1.0, description="Minimum cosine similarity returned"
     )
 
     @model_validator(mode="after")
@@ -96,6 +105,15 @@ class Settings(BaseSettings):
         """Refuse to run the test environment against a non-test database."""
         if self.app_env == "test" and self.database_url is not None:
             assert_test_database_url(self.database_url.get_secret_value())
+        return self
+
+    @model_validator(mode="after")
+    def _check_rag_settings(self) -> Settings:
+        if self.rag_chunk_overlap >= self.rag_chunk_size:
+            raise ValueError("RAG_CHUNK_OVERLAP must be smaller than RAG_CHUNK_SIZE")
+        if self.embedding_provider == "openai" and self.embedding_model.startswith("BAAI/"):
+            # Sensible default when switching provider without naming a model.
+            self.embedding_model = "text-embedding-3-small"
         return self
 
     @property

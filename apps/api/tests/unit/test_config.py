@@ -44,8 +44,20 @@ class TestDefaults:
 
     def test_rag_defaults(self):
         settings = make_settings()
-        assert settings.rag_chunk_size == 512
+        assert settings.rag_chunk_size == 300
+        assert settings.rag_chunk_overlap == 40
+        assert settings.embedding_provider == "local"
+        assert settings.embedding_model == "BAAI/bge-small-en-v1.5"
         assert settings.rag_top_k == 5
+
+    def test_overlap_must_be_smaller_than_chunk(self):
+        with pytest.raises(ValidationError, match="RAG_CHUNK_OVERLAP"):
+            make_settings(rag_chunk_size=100, rag_chunk_overlap=100)
+
+    def test_openai_provider_defaults_to_openai_model(self):
+        assert (
+            make_settings(embedding_provider="openai").embedding_model == "text-embedding-3-small"
+        )
 
     def test_get_settings_returns_cached(self):
         assert get_settings() is get_settings()

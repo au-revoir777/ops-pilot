@@ -16,6 +16,11 @@ RUN apt-get update && \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Bake the embedding model into the image (~130 MB) so containers start without
+# network access to Hugging Face and every replica embeds identically (D-027).
+ENV EMBEDDING_CACHE_DIR=/opt/models HF_HUB_DISABLE_TELEMETRY=1
+RUN mkdir -p /opt/models &&     python -c "from fastembed import TextEmbedding; TextEmbedding('BAAI/bge-small-en-v1.5', cache_dir='/opt/models')" &&     chown -R opspilot:opspilot /opt/models
+
 COPY . .
 
 # Switch to non-root user

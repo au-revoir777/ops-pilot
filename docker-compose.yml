@@ -91,6 +91,10 @@ services:
       MCP_SERVER_URL: http://mcp:8001
       PROMETHEUS_URL: http://prometheus:9090
       LOKI_URL: http://loki:3100
+      RAG_DOCS_PATH: /app/knowledge
+    volumes:
+      # Knowledge base for RAG; ingest with: docker compose exec api python -m app.rag.ingest
+      - ./docs/knowledge:/app/knowledge:ro
     ports:
       - "127.0.0.1:${API_PORT:-8000}:8000"
     networks:

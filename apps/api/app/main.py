@@ -27,7 +27,7 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 from app import metrics
 from app.config import get_settings
 from app.db.session import close_db_engine, init_engine
-from app.routes import chat, health, incidents, investigations
+from app.routes import chat, health, incidents, investigations, knowledge
 from app.services.exceptions import OpsPilotError
 
 REQUEST_ID_HEADER = "X-Request-ID"
@@ -203,6 +203,7 @@ def create_app() -> FastAPI:
     app.include_router(health.router, tags=["Health"])
     app.include_router(incidents.router, prefix="/api", tags=["Incidents"])
     app.include_router(investigations.router, prefix="/api", tags=["Investigations"])
+    app.include_router(knowledge.router, prefix="/api", tags=["Knowledge"])
     app.include_router(chat.router, prefix="/api", tags=["Chat"])
 
     return app

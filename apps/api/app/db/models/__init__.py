@@ -8,10 +8,14 @@ from app.db.models.investigation import (
     InvestigationEventType,
     InvestigationStatus,
 )
+from app.db.models.knowledge import Document, DocumentChunk, DocumentType
 from app.db.models.workload import Workload
 
 __all__ = [
     "Base",
+    "Document",
+    "DocumentChunk",
+    "DocumentType",
     "Incident",
     "IncidentSeverity",
     "IncidentStatus",

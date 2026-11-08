@@ -17,7 +17,9 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 from app.db.models import Base
 
-APP_TABLES = {"workloads", "incidents", "investigations", "investigation_events"}
+CORE_TABLES = {"workloads", "incidents", "investigations", "investigation_events"}
+KNOWLEDGE_TABLES = {"documents", "document_chunks"}
+APP_TABLES = CORE_TABLES | KNOWLEDGE_TABLES
 
 
 def _run(database_url: str, fn):
@@ -66,6 +68,15 @@ def test_downgrade_then_reupgrade(alembic_config: Config, database_url: str, at_
 
     command.upgrade(alembic_config, "head")
     command.downgrade(alembic_config, "base")
+    command.upgrade(alembic_config, "head")
+    assert _run(database_url, _tables) == APP_TABLES
+
+
+def test_knowledge_migration_downgrades_independently(
+    alembic_config: Config, database_url: str, at_head
+):
+    command.downgrade(alembic_config, "0001")
+    assert _run(database_url, _tables) == CORE_TABLES
     command.upgrade(alembic_config, "head")
     assert _run(database_url, _tables) == APP_TABLES
 

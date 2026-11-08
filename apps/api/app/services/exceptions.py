@@ -44,3 +44,10 @@ class InvalidIncidentState(InvalidStateError):
 
 class InvalidInvestigationState(InvalidStateError):
     code = "INVALID_INVESTIGATION_STATE"
+
+
+class KnowledgeUnavailable(OpsPilotError):
+    """Embedding model or vector store unavailable; evidence is missing, not empty."""
+
+    code = "KNOWLEDGE_UNAVAILABLE"
+    status_code = 503
