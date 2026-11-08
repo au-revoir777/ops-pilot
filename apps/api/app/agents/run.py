@@ -22,17 +22,8 @@ from app.agents.tools import connect_mcp
 from app.config import Settings, get_settings
 from app.db.session import build_engine, build_session_factory
 from app.rag.embeddings import build_embedder
-from app.rag.retrieval import RetrievalService, RetrievedChunk
-
-
-class SessionRetriever:
-    """Adapter: the agent's KnowledgeRetriever on top of the RAG RetrievalService."""
-
-    def __init__(self, service: RetrievalService) -> None:
-        self.service = service
-
-    async def retrieve(self, query: str, services: list[str] | None) -> list[RetrievedChunk]:
-        return await self.service.retrieve(query, services=services)
+from app.rag.retrieval import RetrievalService
+from app.services.investigation_runner import SessionRetriever
 
 
 async def investigate(settings: Settings, query: str, service: str | None, minutes: int | None):

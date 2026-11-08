@@ -245,6 +245,31 @@ The agent works without any LLM. Set `LLM_PROVIDER` (`openai` or `anthropic`),
 `LLM_MODEL` and `LLM_API_KEY` to add a labelled, model-written summary. See
 [docs/design/agent.md](docs/design/agent.md).
 
+## Investigation API
+
+```bash
+# Ask a question; the agent runs and the result is stored (201)
+curl -s -X POST localhost:8000/api/investigations -H 'content-type: application/json' \
+  -d '{"query": "Investigate why checkout latency increased", "window_minutes": 30}'
+
+# Or run in the background (202) and poll
+curl -s -X POST localhost:8000/api/investigations -H 'content-type: application/json' \
+  -d '{"query": "Why is checkout returning errors?", "wait": false}'
+curl -s localhost:8000/api/investigations/<id>
+
+curl -s localhost:8000/api/services     # registered + telemetry-discovered services
+curl -s localhost:8000/api/health       # database / MCP / knowledge base / LLM status
+```
+
+An investigation response carries:
+
+- `status`, `service`, `root_cause`, `diagnosis` and `confidence`
+- `latency_ms`
+- the full agent `report`
+- an ordered `events` timeline: status changes, evidence (telemetry and knowledge), tool calls, hypotheses and the conclusion
+
+Timeouts return 504 `INVESTIGATION_TIMEOUT`, and the run is marked FAILED.
+
 ## Testing
 
 ```bash
@@ -273,7 +298,7 @@ releases, so tests never leak state into each other.
 - [x] Phase 4: RAG Pipeline
 - [x] Phase 5: MCP Server
 - [x] Phase 6: Agent
-- [ ] Phase 7: Investigation API
+- [x] Phase 7: Investigation API
 - [ ] Phase 8: Frontend
 - [ ] Phase 9: E2E Incident Scenario
 - [ ] Phase 10: Testing Expansion

@@ -422,3 +422,31 @@
   - One threshold change was made after seeing results: the reportable minimum was lowered from 0.3 to 0.25, so a logs-only diagnosis with Prometheus down is reported as *tentative* instead of not at all.
 - **Live check:** a staged release-plus-slow-database incident was diagnosed as "Release 1.8.5 of checkout introduced a database query regression" (95% heuristic confidence), with a recommended rollback to 1.8.4.
 - **Details:** `docs/design/agent.md`.
+
+---
+
+## D-033: Investigation API: synchronous by default, evidence stored as typed timeline events
+
+- **Date:** 2026-11-08 (Phase 7)
+- **Endpoints:**
+  - `POST /api/investigations` takes `query`, `incident_id`, `service`, `window_minutes` and `wait`.
+  - `GET /api/investigations/{id}`
+  - `GET /api/incidents`
+  - `GET /api/services`: registered workloads merged with services that export telemetry, via MCP.
+  - `GET /api/health`: database, MCP, knowledge base and LLM status. It returns 503 only when the database is down, because MCP or the knowledge base only *degrade* investigations.
+- **Execution:**
+  - With `wait=true` (default), the agent runs inside the request, bounded by `AGENT_TIMEOUT_SECONDS`, and the result comes back as 201.
+  - With `wait=false`, the API returns 202 immediately and runs the agent as a background task with its own database session; clients poll `GET`.
+  - A job queue was rejected for now: one API process and investigations of 10–20 s don't justify one yet. Phase 12/15 can move execution to a worker without changing the API contract.
+- **Lifecycle:** `PENDING → RUNNING → COMPLETED | FAILED`. Each step is its own transaction, and the result (columns + evidence events + COMPLETED) is written atomically.
+  - A timeout returns 504 `INVESTIGATION_TIMEOUT`; an unexpected agent error returns 500 `AGENT_FAILED`. In both cases the investigation is marked FAILED with a summary, and the client gets the investigation id but no internals.
+  - Partial results are not stored.
+- **Storage:**
+  - New investigation columns (migration 0003): `query`, `service`, `root_cause`, `diagnosis`, `confidence`, `latency_ms`, and `report` (the full agent report as JSONB).
+  - The spec's `evidence` and `tool_calls` records are kept as typed rows in the existing append-only `investigation_events` timeline, not as two more tables:
+    - `EVIDENCE` with `source_type` telemetry/knowledge, `source` and `relevance`
+    - `TOOL_CALL` with tool, arguments, status and latency
+    - `HYPOTHESIS`
+    - `CONCLUSION`
+  - That keeps one ordered audit trail per investigation, which is also what the UI will render.
+- **Ad-hoc questions:** a question without `incident_id` creates its own incident ("Investigation: <question>"), so every investigation stays attached to an incident (the `incident_id NOT NULL` invariant from D-015).

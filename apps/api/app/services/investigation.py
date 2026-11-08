@@ -91,7 +91,13 @@ class InvestigationService:
             raise IncidentNotFound(f"Incident {incident_id} not found")
         return await self.investigations.list_for_incident(incident_id)
 
-    async def create_investigation(self, incident_id: uuid.UUID) -> Investigation:
+    async def create_investigation(
+        self,
+        incident_id: uuid.UUID,
+        *,
+        query: str | None = None,
+        service: str | None = None,
+    ) -> Investigation:
         """Open an investigation and move an OPEN incident to INVESTIGATING, atomically."""
         async with transaction(self.session, "create_investigation"):
             incident = await self.incidents.get(incident_id, for_update=True)
@@ -106,7 +112,12 @@ class InvestigationService:
                 apply_incident_transition(incident, IncidentStatus.INVESTIGATING)
 
             investigation = await self.investigations.add(
-                Investigation(incident_id=incident.id, status=InvestigationStatus.PENDING)
+                Investigation(
+                    incident_id=incident.id,
+                    status=InvestigationStatus.PENDING,
+                    query=query,
+                    service=service,
+                )
             )
             await self.investigations.add_event(
                 InvestigationEvent(
@@ -188,6 +199,65 @@ class InvestigationService:
                 )
             event = await self._append_event(investigation_id, event_type, message, details)
         return event
+
+    async def record_result(
+        self,
+        investigation_id: uuid.UUID,
+        *,
+        result: dict[str, Any],
+        events: list[tuple[InvestigationEventType, str, dict[str, Any]]],
+        latency_ms: int,
+    ) -> Investigation:
+        """Persist an agent result: evidence events, result columns, COMPLETED, atomically.
+
+        ``result`` carries service, root_cause, diagnosis, confidence and the full
+        report. Either all of it is stored or none (the investigation then stays
+        RUNNING and the caller marks it FAILED).
+        """
+        async with transaction(self.session, "record_investigation_result"):
+            investigation = await self._get_locked(investigation_id)
+            validate_investigation_transition(investigation.status, InvestigationStatus.COMPLETED)
+            sequence = await self.investigations.next_event_sequence(investigation_id)
+            for offset, (event_type, message, details) in enumerate(events):
+                await self.investigations.add_event(
+                    InvestigationEvent(
+                        investigation_id=investigation_id,
+                        sequence=sequence + offset,
+                        event_type=event_type,
+                        message=message[:5000],
+                        details=details,
+                    )
+                )
+            investigation.service = result.get("service") or investigation.service
+            investigation.root_cause = result.get("root_cause")
+            investigation.diagnosis = result.get("diagnosis")
+            investigation.confidence = result.get("confidence")
+            investigation.report = result.get("report")
+            investigation.latency_ms = latency_ms
+            previous = investigation.status
+            now = datetime.now(UTC)
+            investigation.status = InvestigationStatus.COMPLETED
+            investigation.completed_at = now
+            investigation.summary = result.get("diagnosis")
+            await self._append_event(
+                investigation_id,
+                InvestigationEventType.STATUS_CHANGE,
+                f"Status changed from {previous.value} to completed",
+                {"from": previous.value, "to": "completed"},
+            )
+        INVESTIGATIONS_FINISHED.labels(outcome="completed").inc()
+        if investigation.started_at is not None:
+            INVESTIGATION_DURATION.labels(outcome="completed").observe(
+                (now - investigation.started_at).total_seconds()
+            )
+        logger.info(
+            "investigation_completed",
+            investigation_id=str(investigation_id),
+            root_cause=result.get("root_cause"),
+            confidence=result.get("confidence"),
+            latency_ms=latency_ms,
+        )
+        return await self.get_investigation(investigation_id)
 
     async def _get_locked(self, investigation_id: uuid.UUID) -> Investigation:
         investigation = await self.investigations.get(investigation_id, for_update=True)

@@ -80,6 +80,12 @@ def init_engine(settings: Settings) -> AsyncEngine:
     return _engine
 
 
+def session_factory() -> async_sessionmaker[AsyncSession]:
+    if _session_factory is None:
+        raise RuntimeError("Database engine not initialised; call init_engine() at startup")
+    return _session_factory
+
+
 def get_engine() -> AsyncEngine:
     if _engine is None:
         raise RuntimeError("Database engine not initialised; call init_engine() at startup")

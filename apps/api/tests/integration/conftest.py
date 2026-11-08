@@ -18,8 +18,10 @@ Services behave exactly as in production, and nothing leaks between tests.
 
 from __future__ import annotations
 
+import json
 import os
 from collections.abc import AsyncGenerator, Iterator
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 import pytest
@@ -30,9 +32,18 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, AsyncSession, create_async_engine
 
-from app.config import assert_test_database_url
+from app.agents.graph import InvestigationAgent
+from app.agents.simulation import NOW, ScenarioRetriever, ScenarioToolClient
+from app.config import Settings, assert_test_database_url
 from app.db.session import get_db_session
+from app.dependencies import get_agent_factory, get_background_session_factory
 from app.main import create_app
+
+EVAL_CASES = json.loads(
+    (Path(__file__).resolve().parents[4] / "tests/evaluation/cases.json").read_text(
+        encoding="utf-8"
+    )
+)
 
 # Throwaway credentials for the local tmpfs test container only.
 DEFAULT_TEST_DATABASE_URL = (
@@ -94,13 +105,40 @@ async def db_session(connection: AsyncConnection) -> AsyncGenerator[AsyncSession
 
 
 @pytest.fixture
-def app(db_session: AsyncSession) -> FastAPI:
+def agent_case() -> str:
+    """Which evaluation scenario the simulated agent replays (override per test)."""
+    return "deploy-db-regression"
+
+
+def simulated_agent_factory(case_id: str, **settings_overrides):
+    """Agent factory replaying an evaluation scenario instead of calling MCP."""
+    cases = {c["id"]: c for c in EVAL_CASES["cases"]}
+    case = cases[case_id]
+    knowledge = EVAL_CASES["knowledge_sets"].get(case["knowledge"], case["knowledge"])
+    settings = Settings(_env_file=None, **{"llm_provider": "none", **settings_overrides})
+
+    @asynccontextmanager
+    async def factory(_session):
+        tools = ScenarioToolClient(case["telemetry"])
+        yield InvestigationAgent(tools, ScenarioRetriever(knowledge), settings, now=lambda: NOW)
+
+    return factory
+
+
+@pytest.fixture
+def app(db_session: AsyncSession, agent_case: str) -> FastAPI:
     app = create_app()
 
     async def _session() -> AsyncGenerator[AsyncSession, None]:
         yield db_session
 
+    @asynccontextmanager
+    async def _background_session():
+        yield db_session  # same transaction, so the test can see background writes
+
     app.dependency_overrides[get_db_session] = _session
+    app.dependency_overrides[get_agent_factory] = lambda: simulated_agent_factory(agent_case)
+    app.dependency_overrides[get_background_session_factory] = lambda: _background_session
     return app
 
 

@@ -73,9 +73,11 @@ async def test_create_and_get_investigation(client: AsyncClient):
     response = await client.post("/api/investigations", json={"incident_id": incident["id"]})
     assert response.status_code == 201
     investigation = response.json()
-    assert investigation["status"] == "pending"
+    # The agent ran (simulated tools) and its result was persisted.
+    assert investigation["status"] == "completed"
     assert investigation["incident_id"] == incident["id"]
-    assert [e["event_type"] for e in investigation["events"]] == ["status_change"]
+    assert investigation["query"] == "DB latency high"  # from the incident title
+    assert investigation["events"][0]["message"] == "Investigation created"
 
     fetched = await client.get(f"/api/investigations/{investigation['id']}")
     assert fetched.status_code == 200

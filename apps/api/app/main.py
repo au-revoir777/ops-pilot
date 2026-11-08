@@ -27,7 +27,7 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 from app import metrics
 from app.config import get_settings
 from app.db.session import close_db_engine, init_engine
-from app.routes import chat, health, incidents, investigations, knowledge
+from app.routes import chat, health, incidents, investigations, knowledge, system
 from app.services.exceptions import OpsPilotError
 
 REQUEST_ID_HEADER = "X-Request-ID"
@@ -143,7 +143,12 @@ async def opspilot_error_handler(request: Request, exc: OpsPilotError) -> JSONRe
     logger = structlog.get_logger("opspilot.errors")
     if exc.status_code >= 500:
         logger.error("request_failed", path=request.url.path, code=exc.code)
-        message = "The request could not be completed. Please retry later."
+        # Only messages written for clients (no internals) are passed through.
+        message = (
+            str(exc)
+            if exc.public_message
+            else ("The request could not be completed. Please retry later.")
+        )
     else:
         logger.info("request_rejected", path=request.url.path, code=exc.code)
         message = str(exc)
@@ -204,6 +209,7 @@ def create_app() -> FastAPI:
     app.include_router(incidents.router, prefix="/api", tags=["Incidents"])
     app.include_router(investigations.router, prefix="/api", tags=["Investigations"])
     app.include_router(knowledge.router, prefix="/api", tags=["Knowledge"])
+    app.include_router(system.router, prefix="/api", tags=["System"])
     app.include_router(chat.router, prefix="/api", tags=["Chat"])
 
     return app

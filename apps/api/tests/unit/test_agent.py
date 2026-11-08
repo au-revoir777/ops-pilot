@@ -429,3 +429,24 @@ def test_llm_provider_configuration():
     assert build_llm(settings(llm_provider="openai")) is None  # no key: deterministic mode
     llm = build_llm(settings(llm_provider="anthropic", llm_api_key="k", llm_model="m"))
     assert llm.name == "anthropic:m"
+
+
+def test_db_slow_for_whole_window_counts_as_rise_not_flat():
+    facts = ev.Facts()
+    ev.extract_db_history(
+        facts, "checkout", {"status": "ok", "series": [{"points": series([0.9] * 12)}]}
+    )
+    assert facts.observations[0].signals == ["db_latency_rise"]
+
+    recovered = ev.Facts()
+    values = [0.04] * 5 + [0.9] * 3 + [0.04] * 4
+    ev.extract_db_history(
+        recovered, "checkout", {"status": "ok", "series": [{"points": series(values)}]}
+    )
+    assert recovered.observations == []  # a recovered spike is neither a rise now nor "flat"
+
+    flat = ev.Facts()
+    ev.extract_db_history(
+        flat, "checkout", {"status": "ok", "series": [{"points": series([0.04] * 12)}]}
+    )
+    assert flat.observations[0].signals == ["db_latency_flat"]

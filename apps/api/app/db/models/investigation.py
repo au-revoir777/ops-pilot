@@ -7,7 +7,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import DateTime, ForeignKey, Integer, Text, UniqueConstraint
+from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -52,6 +52,17 @@ class Investigation(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     summary: Mapped[str | None] = mapped_column(Text)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    # Agent request and result (Phase 7). The individual facts, retrieved
+    # passages, tool calls and hypotheses are timeline events; ``report`` keeps
+    # the full structured report exactly as the agent produced it.
+    query: Mapped[str | None] = mapped_column(Text)
+    service: Mapped[str | None] = mapped_column(String(100))
+    root_cause: Mapped[str | None] = mapped_column(String(100))
+    diagnosis: Mapped[str | None] = mapped_column(Text)
+    confidence: Mapped[float | None] = mapped_column(Float)
+    latency_ms: Mapped[int | None] = mapped_column(Integer)
+    report: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
 
     incident: Mapped[Incident] = relationship(back_populates="investigations")
     events: Mapped[list[InvestigationEvent]] = relationship(

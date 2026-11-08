@@ -34,6 +34,9 @@
 | `app/dependencies.py` | DI providers: request-scoped session, services |
 | `app/routes/health.py` | `/health` (liveness) and `/ready` (DB `SELECT 1`, 503 on failure) |
 | `app/routes/incidents.py` | `POST/GET /api/incidents`, `GET /api/incidents/{id}`, `PATCH .../status` |
+| `app/routes/system.py` | `GET /api/services`, `GET /api/health` (dependency status) |
+| `app/services/investigation_runner.py` | Runs the agent for an investigation, persists evidence/result, handles timeouts |
+| `app/db/migrations/versions/0003_investigation_results.py` | Investigation query/result columns |
 | `app/routes/investigations.py` | `POST /api/investigations`, `GET /api/investigations/{id}`, `GET /api/incidents/{id}/investigations` |
 | `app/routes/chat.py` | Agent chat endpoint *(skeleton)* |
 | `app/metrics.py` | Prometheus metrics: RED middleware, domain metrics, agent metric contract |
@@ -81,6 +84,8 @@
 | `tests/integration/test_rag_pipeline.py` | Ingest → pgvector → retrieval, filters, idempotency, pruning, search API |
 | `tests/integration/test_rag_quality.py` | `pytest -m evaluation`: retrieval quality with the real model |
 | `tests/unit/test_agent.py` | Graph transitions, bounds, planner, evidence, confidence, LLM stub |
+| `tests/unit/test_investigation_runner.py` | Runner success/timeout/failure, report → events, route validation |
+| `tests/integration/test_investigation_api.py` | API → database → agent: sync/background runs, failures, services, health |
 | `tests/unit/test_services.py` | State machines, transaction commit/rollback with mocked repositories |
 | `tests/integration/conftest.py` | Real Postgres fixtures: Alembic to head, savepoint-rollback isolation |
 | `tests/integration/test_migrations.py` | Upgrade from empty, downgrade/re-upgrade, models == migrations |

@@ -1,4 +1,4 @@
-"""Investigation API endpoints. Thin: validate input, call the service, shape the output."""
+"""Investigation API endpoints. Thin: validate input, call the runner/service, shape output."""
 
 from __future__ import annotations
 
@@ -6,17 +6,47 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from fastapi import APIRouter
-from pydantic import BaseModel, ConfigDict
+from fastapi import APIRouter, BackgroundTasks, Response
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from app.config import get_settings
 from app.db.models.investigation import InvestigationEventType, InvestigationStatus
-from app.dependencies import InvestigationServiceDep
+from app.dependencies import (
+    AgentFactoryDep,
+    BackgroundSessionFactoryDep,
+    InvestigationServiceDep,
+    SessionDep,
+)
+from app.services.investigation_runner import InvestigationRunner, run_in_background
 
 router = APIRouter()
 
 
 class InvestigationCreate(BaseModel):
-    incident_id: uuid.UUID
+    """Start an investigation from a question, an existing incident, or both."""
+
+    query: str | None = Field(
+        default=None,
+        min_length=3,
+        max_length=1000,
+        description="e.g. 'Investigate why checkout latency increased'",
+    )
+    incident_id: uuid.UUID | None = None
+    service: str | None = Field(
+        default=None, min_length=1, max_length=100, pattern=r"^[a-z0-9][a-z0-9_-]*$"
+    )
+    window_minutes: int | None = Field(default=None, ge=5, le=360)
+    wait: bool = Field(
+        default=True,
+        description="true: run the agent and return the result (201). "
+        "false: return 202 immediately and run in the background; poll GET.",
+    )
+
+    @model_validator(mode="after")
+    def _need_question_or_incident(self) -> InvestigationCreate:
+        if self.query is None and self.incident_id is None:
+            raise ValueError("provide a query, an incident_id, or both")
+        return self
 
 
 class InvestigationEventResponse(BaseModel):
@@ -35,6 +65,12 @@ class InvestigationSummary(BaseModel):
     id: uuid.UUID
     incident_id: uuid.UUID
     status: InvestigationStatus
+    query: str | None
+    service: str | None
+    root_cause: str | None
+    diagnosis: str | None
+    confidence: float | None
+    latency_ms: int | None
     summary: str | None
     started_at: datetime | None
     completed_at: datetime | None
@@ -43,15 +79,38 @@ class InvestigationSummary(BaseModel):
 
 
 class InvestigationDetail(InvestigationSummary):
+    report: dict[str, Any] | None = Field(
+        description="Full agent report: observations, evidence, hypotheses, recommendations"
+    )
     events: list[InvestigationEventResponse]
 
 
-@router.post("/investigations", response_model=InvestigationDetail, status_code=201)
+@router.post(
+    "/investigations",
+    response_model=InvestigationDetail,
+    status_code=201,
+    responses={202: {"description": "Accepted; the agent runs in the background"}},
+)
 async def create_investigation(
-    data: InvestigationCreate, service: InvestigationServiceDep
+    data: InvestigationCreate,
+    session: SessionDep,
+    agent_factory: AgentFactoryDep,
+    session_factory: BackgroundSessionFactoryDep,
+    background: BackgroundTasks,
+    response: Response,
 ) -> InvestigationDetail:
-    investigation = await service.create_investigation(data.incident_id)
-    return InvestigationDetail.model_validate(investigation)
+    settings = get_settings()
+    runner = InvestigationRunner(session, agent_factory, settings)
+    investigation = await runner.create(
+        query=data.query, incident_id=data.incident_id, service=data.service
+    )
+    if not data.wait:
+        background.add_task(run_in_background, session_factory, agent_factory, settings,
+                            investigation.id, data.window_minutes)  # fmt: skip
+        response.status_code = 202
+        return InvestigationDetail.model_validate(investigation)
+    finished = await runner.run(investigation.id, window_minutes=data.window_minutes)
+    return InvestigationDetail.model_validate(finished)
 
 
 @router.get("/investigations/{investigation_id}", response_model=InvestigationDetail)

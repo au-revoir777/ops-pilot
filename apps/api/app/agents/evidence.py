@@ -221,10 +221,26 @@ def extract_db_history(facts: Facts, service: str, result: dict[str, Any]) -> No
             baseline_s=step["baseline"],
             current_s=step["current"],
         )
-    elif any(p.get("value") is not None for p in points):
+        return
+    values = [p["value"] for p in points if p.get("value") is not None]
+    if not values:
+        return
+    if min(values) >= DB_RISE_MIN_S:
+        # High for the whole window: no baseline to compare, but clearly slow.
         facts.add(
             "metric",
-            f"{service} database query p95 stayed flat during the window",
+            f"{service} database query p95 was elevated for the whole window "
+            f"(at least {_fmt_ms(min(values) * 1000)}, now {_fmt_ms(values[-1] * 1000)})",
+            "query_metrics",
+            signals=["db_latency_rise"],
+            current_s=values[-1],
+        )
+    elif max(values) < DB_RISE_MIN_S:
+        # Only "flat" when it never got slow; a recovered spike is neither.
+        facts.add(
+            "metric",
+            f"{service} database query p95 stayed below {_fmt_ms(DB_RISE_MIN_S * 1000)} "
+            "during the window",
             "query_metrics",
             signals=["db_latency_flat"],
         )

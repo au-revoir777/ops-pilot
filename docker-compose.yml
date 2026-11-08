@@ -67,6 +67,7 @@ services:
       dockerfile: Dockerfile
     image: opspilot-api:local
     container_name: opspilot-migrate
+    init: true  # reap child processes; clean stop on SIGTERM
     command: ["alembic", "upgrade", "head"]
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-opspilot}:${POSTGRES_PASSWORD:-opspilot_dev}@postgres:5432/${POSTGRES_DB:-opspilot}
@@ -83,12 +84,14 @@ services:
   api:
     image: opspilot-api:local
     container_name: opspilot-api
+    init: true  # reap child processes; clean stop on SIGTERM
     env_file:
       - path: .env
         required: false
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-opspilot}:${POSTGRES_PASSWORD:-opspilot_dev}@postgres:5432/${POSTGRES_DB:-opspilot}
       MCP_SERVER_URL: http://mcp:8001
+      MCP_AUTH_TOKEN: ${MCP_AUTH_TOKEN:-}
       PROMETHEUS_URL: http://prometheus:9090
       LOKI_URL: http://loki:3100
       RAG_DOCS_PATH: /app/knowledge
@@ -116,6 +119,7 @@ services:
       dockerfile: Dockerfile
     image: opspilot-mcp:local
     container_name: opspilot-mcp
+    init: true  # reap child processes; clean stop on SIGTERM
     environment:
       PROMETHEUS_URL: http://prometheus:9090
       LOKI_URL: http://loki:3100
@@ -141,6 +145,7 @@ services:
       context: ./workloads
     image: opspilot-workloads:local
     container_name: opspilot-checkout
+    init: true  # reap child processes; clean stop on SIGTERM
     command: ["uvicorn", "opsdemo.checkout:app", "--host", "0.0.0.0", "--port", "8080", "--no-access-log"]
     environment: &workload-env
       SERVICE_NAME: checkout
@@ -166,6 +171,7 @@ services:
       context: ./workloads
     image: opspilot-workloads:local
     container_name: opspilot-payments
+    init: true  # reap child processes; clean stop on SIGTERM
     command: ["uvicorn", "opsdemo.payments:app", "--host", "0.0.0.0", "--port", "8081", "--no-access-log"]
     environment:
       <<: *workload-env
@@ -182,6 +188,7 @@ services:
       context: ./workloads
     image: opspilot-workloads:local
     container_name: opspilot-users
+    init: true  # reap child processes; clean stop on SIGTERM
     command: ["uvicorn", "opsdemo.users:app", "--host", "0.0.0.0", "--port", "8082", "--no-access-log"]
     environment:
       <<: *workload-env

@@ -13,6 +13,8 @@ class OpsPilotError(Exception):
 
     code = "INTERNAL_ERROR"
     status_code = 500
+    # True when the message is written for API clients (safe to return on 5xx).
+    public_message = False
 
 
 class NotFoundError(OpsPilotError):
@@ -51,3 +53,19 @@ class KnowledgeUnavailable(OpsPilotError):
 
     code = "KNOWLEDGE_UNAVAILABLE"
     status_code = 503
+
+
+class InvestigationTimeout(OpsPilotError):
+    """The agent did not finish within AGENT_TIMEOUT_SECONDS; the run is marked FAILED."""
+
+    code = "INVESTIGATION_TIMEOUT"
+    status_code = 504
+    public_message = True
+
+
+class AgentFailed(OpsPilotError):
+    """The agent raised unexpectedly; the run is marked FAILED and details are logged."""
+
+    code = "AGENT_FAILED"
+    status_code = 500
+    public_message = True
