@@ -13,6 +13,7 @@ from app.db.models.incident import Incident, IncidentSeverity, IncidentStatus
 from app.db.models.workload import Workload
 from app.db.repositories.incident import IncidentRepository
 from app.db.repositories.workload import WorkloadRepository
+from app.metrics import INCIDENT_STATUS_CHANGES, INCIDENTS_CREATED
 from app.services.exceptions import IncidentNotFound, InvalidIncidentState
 from app.services.transactions import transaction
 
@@ -89,6 +90,7 @@ class IncidentService:
                     workload=workload,
                 )
             )
+        INCIDENTS_CREATED.labels(severity=severity.value).inc()
         logger.info("incident_created", incident_id=str(incident.id), severity=severity.value)
         return incident
 
@@ -101,6 +103,7 @@ class IncidentService:
             apply_incident_transition(incident, target)
             await self.session.flush()
             await self.session.refresh(incident, attribute_names=["updated_at"])
+        INCIDENT_STATUS_CHANGES.labels(from_status=previous.value, to_status=target.value).inc()
         logger.info(
             "incident_status_changed",
             incident_id=str(incident_id),

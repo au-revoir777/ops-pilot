@@ -36,6 +36,7 @@
 | `app/routes/incidents.py` | `POST/GET /api/incidents`, `GET /api/incidents/{id}`, `PATCH .../status` |
 | `app/routes/investigations.py` | `POST /api/investigations`, `GET /api/investigations/{id}`, `GET /api/incidents/{id}/investigations` |
 | `app/routes/chat.py` | Agent chat endpoint *(skeleton)* |
+| `app/metrics.py` | Prometheus metrics: RED middleware, domain metrics, agent metric contract |
 | `app/db/base.py` | Declarative base, naming convention, UUID/timestamp mixins, `pg_enum` helper |
 | `app/db/session.py` | Engine/session factory lifecycle, `get_db_session`, slow-query logging |
 | `app/db/models/` | `Workload`, `Incident`, `Investigation`, `InvestigationEvent` + status enums |
@@ -56,6 +57,7 @@
 | `tests/conftest.py` | Auto-applies `unit` / `integration` markers by directory |
 | `tests/unit/test_config.py` | Settings defaults, env parsing, environments, test-DB guard, secret masking |
 | `tests/unit/test_health.py` | Probes, request IDs, structured/non-leaking errors, validation (no DB) |
+| `tests/unit/test_metrics.py` | /metrics, route-template labels, domain counters, log context |
 | `tests/unit/test_services.py` | State machines, transaction commit/rollback with mocked repositories |
 | `tests/integration/conftest.py` | Real Postgres fixtures: Alembic to head, savepoint-rollback isolation |
 | `tests/integration/test_migrations.py` | Upgrade from empty, downgrade/re-upgrade, models == migrations |
@@ -101,6 +103,16 @@ One package, one image, three services (D-020). Compose picks the service via th
 
 | File | Purpose |
 |------|---------|
+| `prometheus/prometheus.yml` | Scrape config: API, workloads, Loki, Alloy, Prometheus (10 s) |
+| `prometheus/rules/opspilot.yml` | RED recording rules (rate, error ratio, p50/p95/p99, DB p95) + alerts |
+| `loki/loki-config.yml` | Loki single-binary config (filesystem storage, schema v13) |
+| `alloy/config.alloy` | Grafana Alloy: Docker log discovery → JSON parsing → Loki (request_id as structured metadata) |
+| `grafana/provisioning/datasources/datasources.yml` | Prometheus and Loki data sources with fixed UIDs |
+| `grafana/provisioning/dashboards/dashboards.yml` | File-based dashboard provider |
+| `grafana/build_dashboards.py` | Generates the dashboard JSON (dashboards as code) |
+| `grafana/dashboards/opspilot-services.json` | Generated "OpsPilot — Services" dashboard |
+
+------|---------|
 | `prometheus/prometheus.yml` | Scrape config targeting all services |
 | `loki/loki-config.yml` | Loki local-mode config (filesystem storage) |
 | `grafana/dashboards/` | *(Phase 3)* Grafana dashboard JSON |
@@ -137,8 +149,14 @@ One package, one image, three services (D-020). Compose picks the service via th
 
 ## `tests/` — Top-Level Test Suites
 
-| Directory | Purpose |
-|-----------|---------|
+| Path | Purpose |
+|------|---------|
+| `observability/test_observability_config.py` | Unit: scrape targets vs Compose, rules/dashboards only use emitted metrics, stale dashboard, data-source UIDs, ports |
+| `system/test_observability_stack.py` | System (`pytest -m system`, needs the stack): targets up, rules loaded, Grafana, cross-service request trace in Loki, latency injection visible |
+| `evaluation/` | *(Phase 10)* Agent evaluation test cases |
+| `fixtures/` | *(Phase 10)* Shared test data |
+
+-----------|---------|
 | `system/` | *(Phase 10)* End-to-end system tests |
 | `evaluation/` | *(Phase 10)* Agent evaluation test cases |
 | `fixtures/` | *(Phase 10)* Shared test data |

@@ -5,6 +5,9 @@
 # Stop:  docker compose down -v
 # =============================================================================
 
+# Fixed project name: Alloy selects this project's containers by it.
+name: opspilot
+
 services:
   # -------------------------------------------------------------------------
   # PostgreSQL + pgvector
@@ -89,7 +92,7 @@ services:
       PROMETHEUS_URL: http://prometheus:9090
       LOKI_URL: http://loki:3100
     ports:
-      - "8000:8000"
+      - "127.0.0.1:${API_PORT:-8000}:8000"
     networks:
       - default
       - backend
@@ -113,7 +116,7 @@ services:
       PROMETHEUS_URL: http://prometheus:9090
       LOKI_URL: http://loki:3100
     ports:
-      - "8001:8001"
+      - "127.0.0.1:${MCP_PORT:-8001}:8001"
     restart: unless-stopped
 
   # -------------------------------------------------------------------------
@@ -183,36 +186,72 @@ services:
   # -------------------------------------------------------------------------
   # Observability
   # -------------------------------------------------------------------------
+  # Metrics. Rules in observability/prometheus/rules (RED recording rules + alerts).
   prometheus:
     image: prom/prometheus:v2.54.0
     container_name: opspilot-prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=3d
     volumes:
-      - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./observability/prometheus/rules:/etc/prometheus/rules:ro
       - promdata:/prometheus
     ports:
-      - "9090:9090"
+      - "127.0.0.1:${PROMETHEUS_PORT:-9090}:9090"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:9090/-/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     restart: unless-stopped
 
+  # Logs: Loki stores them, Alloy collects container stdout and parses our JSON.
   loki:
     image: grafana/loki:3.2.0
     container_name: opspilot-loki
+    command: ["-config.file=/etc/loki/local-config.yaml"]
     volumes:
-      - ./observability/loki/loki-config.yml:/etc/loki/local-config.yaml
+      - ./observability/loki/loki-config.yml:/etc/loki/local-config.yaml:ro
+      - lokidata:/loki
     ports:
-      - "3100:3100"
+      - "127.0.0.1:${LOKI_PORT:-3100}:3100"
+    restart: unless-stopped
+
+  alloy:
+    image: grafana/alloy:v1.5.1
+    container_name: opspilot-alloy
+    command: ["run", "--server.http.listen-addr=0.0.0.0:12345", "/etc/alloy/config.alloy"]
+    volumes:
+      - ./observability/alloy/config.alloy:/etc/alloy/config.alloy:ro
+      # Read-only access to discover containers and read their logs.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      - loki
     restart: unless-stopped
 
   grafana:
     image: grafana/grafana:11.2.0
     container_name: opspilot-grafana
     environment:
-      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
       GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/opspilot-services.json
     volumes:
-      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
       - grafanadata:/var/lib/grafana
     ports:
-      - "3000:3000"
+      - "127.0.0.1:${GRAFANA_PORT:-3000}:3000"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     depends_on:
       - prometheus
       - loki
@@ -241,4 +280,5 @@ networks:
 volumes:
   pgdata:
   promdata:
+  lokidata:
   grafanadata:

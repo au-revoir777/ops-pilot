@@ -19,6 +19,12 @@ from app.db.models.investigation import (
 )
 from app.db.repositories.incident import IncidentRepository
 from app.db.repositories.investigation import InvestigationRepository
+from app.metrics import (
+    INCIDENT_STATUS_CHANGES,
+    INVESTIGATION_DURATION,
+    INVESTIGATIONS_CREATED,
+    INVESTIGATIONS_FINISHED,
+)
 from app.services.exceptions import (
     IncidentNotFound,
     InvalidIncidentState,
@@ -95,7 +101,8 @@ class InvestigationService:
                 raise InvalidIncidentState(
                     f"Cannot investigate an incident in state '{incident.status.value}'"
                 )
-            if incident.status is IncidentStatus.OPEN:
+            moved_incident = incident.status is IncidentStatus.OPEN
+            if moved_incident:
                 apply_incident_transition(incident, IncidentStatus.INVESTIGATING)
 
             investigation = await self.investigations.add(
@@ -110,6 +117,10 @@ class InvestigationService:
                     details={"to": InvestigationStatus.PENDING.value},
                 )
             )
+        # Metrics only after a successful commit, so rolled-back work is never counted.
+        INVESTIGATIONS_CREATED.inc()
+        if moved_incident:
+            INCIDENT_STATUS_CHANGES.labels(from_status="open", to_status="investigating").inc()
         logger.info(
             "investigation_created",
             investigation_id=str(investigation.id),
@@ -145,6 +156,12 @@ class InvestigationService:
                 f"Status changed from {previous.value} to {target.value}",
                 {"from": previous.value, "to": target.value},
             )
+        if target in TERMINAL_INVESTIGATION_STATES:
+            INVESTIGATIONS_FINISHED.labels(outcome=target.value).inc()
+            if investigation.started_at is not None:
+                INVESTIGATION_DURATION.labels(outcome=target.value).observe(
+                    (now - investigation.started_at).total_seconds()
+                )
         logger.info(
             "investigation_status_changed",
             investigation_id=str(investigation_id),

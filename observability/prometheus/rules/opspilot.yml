@@ -1,0 +1,52 @@
+# Recording rules give dashboards (and, from Phase 5, the MCP tools) cheap,
+# consistent RED signals per service. Alerts surface incidents in the
+# Prometheus UI and /api/v1/alerts; there is no Alertmanager locally.
+groups:
+  - name: opspilot-red
+    rules:
+      - record: service:http_requests:rate1m
+        expr: sum by (service) (rate(http_requests_total[1m]))
+
+      - record: service:http_errors:ratio_rate1m
+        expr: |
+          sum by (service) (rate(http_request_errors_total[1m]))
+            /
+          sum by (service) (rate(http_requests_total[1m]))
+
+      - record: service:http_latency_seconds:p50_1m
+        expr: histogram_quantile(0.50, sum by (service, le) (rate(http_request_duration_seconds_bucket[1m])))
+
+      - record: service:http_latency_seconds:p95_1m
+        expr: histogram_quantile(0.95, sum by (service, le) (rate(http_request_duration_seconds_bucket[1m])))
+
+      - record: service:http_latency_seconds:p99_1m
+        expr: histogram_quantile(0.99, sum by (service, le) (rate(http_request_duration_seconds_bucket[1m])))
+
+      - record: service_operation:db_query_seconds:p95_1m
+        expr: histogram_quantile(0.95, sum by (service, operation, le) (rate(db_query_duration_seconds_bucket[1m])))
+
+  - name: opspilot-alerts
+    rules:
+      - alert: HighLatencyP95
+        expr: service:http_latency_seconds:p95_1m > 1
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.service }} p95 latency is {{ $value | humanizeDuration }}"
+
+      - alert: HighErrorRate
+        expr: service:http_errors:ratio_rate1m > 0.05
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.service }} 5xx ratio is {{ $value | humanizePercentage }}"
+
+      - alert: TargetDown
+        expr: up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.job }} target {{ $labels.instance }} is down"

@@ -92,12 +92,32 @@ jobs:
         run: pytest -m integration -v --tb=short
 
   # ---------------------------------------------------------------------------
+  # Observability config (Prometheus config + rules, Alloy syntax)
+  # ---------------------------------------------------------------------------
+  observability-config:
+    name: Observability Config
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+      - name: promtool check config and rules
+        run: >-
+          docker run --rm --entrypoint promtool
+          -v "$PWD/observability/prometheus:/etc/prometheus:ro"
+          prom/prometheus:v2.54.0 check config /etc/prometheus/prometheus.yml
+      - name: alloy config syntax
+        run: >-
+          docker run --rm --entrypoint alloy
+          -v "$PWD/observability/alloy:/etc/alloy:ro"
+          grafana/alloy:v1.5.1 fmt /etc/alloy/config.alloy
+
+  # ---------------------------------------------------------------------------
   # Build Docker Images
   # ---------------------------------------------------------------------------
   build:
     name: Build Docker Images
     runs-on: ubuntu-latest
-    needs: [test-unit, test-integration]
+    needs: [test-unit, test-integration, observability-config]
     steps:
       - uses: actions/checkout@v4
       - name: Build API image

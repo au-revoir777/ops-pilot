@@ -139,6 +139,30 @@ enabled. Set `FAILURE_SEED` for reproducible incidents and `FAILURE_ADMIN_TOKEN`
 to require an `X-Admin-Token` header. Host ports default to 8080/8081/8082 on
 127.0.0.1 and can be changed with `CHECKOUT_PORT`, `PAYMENTS_PORT` and `USERS_PORT`.
 
+## Observability
+
+Prometheus scrapes every service's `/metrics`. Grafana Alloy ships container
+logs (JSON) to Loki, and Grafana is provisioned with both data sources and the
+**OpsPilot — Services** dashboard: request rate, error rate, p50/p95/p99,
+targets up, deployed versions, DB and downstream latency, warning/error logs.
+
+```bash
+ENABLE_FAILURE_INJECTION=true docker compose up -d --build   postgres migrate api checkout payments users prometheus loki alloy grafana
+```
+
+| UI | URL |
+|----|-----|
+| Grafana | http://localhost:3000 (anonymous viewer; admin password from `GRAFANA_ADMIN_PASSWORD`) |
+| Prometheus | http://localhost:9090 (rules and alerts under Status / Alerts) |
+| Loki API | http://localhost:3100 |
+
+Trace one request across services in Grafana Explore (Loki):
+`{service=~"checkout|users|payments"} | request_id="<X-Request-ID>"`.
+
+Dashboards are generated: edit `observability/grafana/build_dashboards.py`,
+then run it. Ports are configurable with `GRAFANA_PORT`, `PROMETHEUS_PORT`,
+`LOKI_PORT` and `API_PORT`.
+
 ## Testing
 
 ```bash
@@ -146,7 +170,8 @@ make test-unit         # no database needed
 make test-db-up        # disposable Postgres on 127.0.0.1:5433 (tmpfs)
 make test-integration  # real PostgreSQL: migrations, repositories, API
 make test-db-down
-make test              # everything
+make test              # unit + integration (system/evaluation excluded)
+make test-system       # needs the running stack (see Observability)
 make lint              # Ruff lint + format check
 ```
 
@@ -161,7 +186,7 @@ releases, so tests never leak state into each other.
 - [x] Phase 0: Project Bootstrap
 - [x] Phase 1: Database & Core Backend
 - [x] Phase 2: Demo Workloads
-- [ ] Phase 3: Observability
+- [x] Phase 3: Observability
 - [ ] Phase 4: RAG Pipeline
 - [ ] Phase 5: MCP Server
 - [ ] Phase 6: Agent

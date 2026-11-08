@@ -20,9 +20,11 @@ from contextlib import asynccontextmanager
 import structlog
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+from app import metrics
 from app.config import get_settings
 from app.db.session import close_db_engine, init_engine
 from app.routes import chat, health, incidents, investigations
@@ -36,6 +38,13 @@ _VALID_REQUEST_ID = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
 # ---------------------------------------------------------------------------
 
 
+def _add_service_context(_logger, _method, event_dict):
+    """Every log line carries service and version for correlation in Loki."""
+    event_dict.setdefault("service", metrics.SERVICE)
+    event_dict.setdefault("version", health.VERSION)
+    return event_dict
+
+
 def _configure_logging(log_level: str) -> None:
     """Configure structlog for JSON-based structured logging."""
     structlog.configure(
@@ -45,7 +54,8 @@ def _configure_logging(log_level: str) -> None:
             structlog.stdlib.add_logger_name,
             structlog.stdlib.add_log_level,
             structlog.stdlib.PositionalArgumentsFormatter(),
-            structlog.processors.TimeStamper(fmt="iso"),
+            _add_service_context,
+            structlog.processors.TimeStamper(fmt="iso", utc=True),
             structlog.processors.StackInfoRenderer(),
             structlog.processors.format_exc_info,
             structlog.processors.UnicodeDecoder(),
@@ -179,8 +189,16 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
         expose_headers=[REQUEST_ID_HEADER],
     )
+    app.add_middleware(metrics.MetricsMiddleware)
     # Added last so it is the outermost middleware and wraps everything else.
     app.add_middleware(CorrelationIdMiddleware)
+
+    metrics.set_build_info(health.VERSION)
+
+    @app.get("/metrics", include_in_schema=False)
+    async def prometheus_metrics() -> Response:
+        # Scraped over the internal network only; not routed by the public ALB.
+        return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
     app.include_router(health.router, tags=["Health"])
     app.include_router(incidents.router, prefix="/api", tags=["Incidents"])

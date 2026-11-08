@@ -15,6 +15,7 @@ import structlog
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.metrics import DB_ERRORS
 from app.services.exceptions import DatabaseOperationError
 
 logger = structlog.get_logger(__name__)
@@ -29,6 +30,7 @@ async def transaction(session: AsyncSession, operation: str) -> AsyncIterator[No
     except SQLAlchemyError as exc:
         await session.rollback()
         # exc.__class__.__name__ only: str(exc) can include SQL and parameters.
+        DB_ERRORS.labels(operation=operation).inc()
         logger.error("db_transaction_failed", operation=operation, error_type=type(exc).__name__)
         raise DatabaseOperationError(f"Database operation failed: {operation}") from exc
     except BaseException:

@@ -1,5 +1,7 @@
 # Shared by all demo workloads (checkout, payments, users): one image, three services.
-fastapi>=0.115.0,<1.0.0
+# Pinned to 0.115.x: newer FastAPI versions put the un-prefixed route in scope["route"],
+# which would change the `route` metric label (see test_metrics_use_full_route_template).
+fastapi>=0.115.0,<0.116.0
 uvicorn[standard]>=0.30.0,<1.0.0
 pydantic-settings>=2.5.0,<3.0.0
 prometheus-client>=0.21.0,<1.0.0

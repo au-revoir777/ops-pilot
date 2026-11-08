@@ -39,7 +39,8 @@ testpaths = ["apps/api/tests", "workloads/tests", "mcp/tests", "tests"]
 pythonpath = ["workloads", "workloads/tests"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
-addopts = "--strict-markers"
+# System/evaluation tests need a running stack or LLM; run them explicitly with -m.
+addopts = "--strict-markers -m 'not system and not evaluation'"
 markers = [
     "unit: Unit tests (no external deps)",
     "integration: Integration tests (require DB/services)",
